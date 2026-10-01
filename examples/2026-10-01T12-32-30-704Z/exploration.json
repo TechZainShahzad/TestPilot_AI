@@ -1,0 +1,95 @@
+{
+  "feature": "Update Contact Info",
+  "targetUrl": "https://parabank.parasoft.com",
+  "pages": [
+    {
+      "url": "https://parabank.parasoft.com/parabank/register.htm",
+      "title": "ParaBank | Register",
+      "purpose": "New customer registration, used here to reach an authenticated session"
+    },
+    {
+      "url": "https://parabank.parasoft.com/parabank/updateprofile.htm",
+      "title": "ParaBank | Update Profile",
+      "purpose": "Edit the logged-in customer’s name, address and phone number"
+    }
+  ],
+  "elements": [
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "First Name",
+      "locatorHint": "page.locator('#customer\\\\.firstName')",
+      "purpose": "Customer first name, AJAX-prefilled on load"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "Last Name",
+      "locatorHint": "page.locator('#customer\\\\.lastName')",
+      "purpose": "Customer last name, AJAX-prefilled on load"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "Address",
+      "locatorHint": "page.locator('#customer\\\\.address\\\\.street')",
+      "purpose": "Street address"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "City",
+      "locatorHint": "page.locator('#customer\\\\.address\\\\.city')",
+      "purpose": "City"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "State",
+      "locatorHint": "page.locator('#customer\\\\.address\\\\.state')",
+      "purpose": "State"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "Zip Code",
+      "locatorHint": "page.locator('#customer\\\\.address\\\\.zipCode')",
+      "purpose": "Zip code"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "textbox",
+      "name": "Phone #",
+      "locatorHint": "page.locator('#customer\\\\.phoneNumber')",
+      "purpose": "Phone number"
+    },
+    {
+      "page": "updateprofile.htm",
+      "role": "button",
+      "name": "Update Profile",
+      "locatorHint": "page.locator('input[value=\"Update Profile\"]')",
+      "purpose": "Submits the profile update"
+    }
+  ],
+  "flows": [
+    {
+      "name": "Happy-path profile update",
+      "steps": [
+        "Navigate to Update Profile",
+        "Change one or more fields",
+        "Click Update Profile",
+        "Observe the success panel",
+        "Reload and confirm the new values persisted"
+      ]
+    },
+    {
+      "name": "Required-field validation",
+      "steps": [
+        "Clear First Name or Last Name",
+        "Click Update Profile",
+        "Observe the inline field error; no request is sent"
+      ]
+    }
+  ],
+  "notes": "The update endpoint (services_proxy/bank/customers/update/{id}) answers 200 with a plain-text body while claiming Content-Type: application/json, so the page’s own jQuery call fails to parse it as JSON and is routed through its AJAX error handler even on a genuine success — the handler specifically checks status === 200 to show the success panel anyway. Confirmed by making the raw request directly: status 200, body \"Successfully updated customer profile\", and the customer record was verified changed on a follow-up GET. This is app behaviour, not a bug in the test — the generated spec does not need to route around it, since the app’s own script already does."
+}

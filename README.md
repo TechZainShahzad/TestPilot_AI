@@ -30,7 +30,7 @@ A human merges. Nothing is ever pushed straight to `main`.
 | 4     | Orchestrator: provider layer, Explorer, Planner     | ✅ Done |
 | 5     | Orchestrator: Generator, Executor, Healer           | ✅ Done |
 | 6     | Orchestrator: Reviewer, Reporter, PR creation       | ✅ Done |
-| 7     | Documentation polish + committed example run        | 🚧 Next |
+| 7     | Documentation polish + committed example run        | ✅ Done |
 
 ---
 

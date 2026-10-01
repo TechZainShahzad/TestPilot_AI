@@ -1,0 +1,6 @@
+{
+  "lintPassed": true,
+  "lintOutput": "No lint issues.",
+  "typecheckPassed": true,
+  "typecheckOutput": "No type errors."
+}

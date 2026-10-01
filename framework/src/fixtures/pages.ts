@@ -22,6 +22,7 @@ import { OverviewPage } from '../pages/overview-page.js';
 import { RegisterPage } from '../pages/register-page.js';
 import { RequestLoanPage } from '../pages/request-loan-page.js';
 import { TransferPage } from '../pages/transfer-page.js';
+import { UpdateProfilePage } from '../pages/update-profile-page.js';
 
 export interface PageFixtures {
   loginPage: LoginPage;
@@ -33,6 +34,7 @@ export interface PageFixtures {
   findTransactionsPage: FindTransactionsPage;
   requestLoanPage: RequestLoanPage;
   accountActivityPage: AccountActivityPage;
+  updateProfilePage: UpdateProfilePage;
   /** Authenticated API client sharing the browser's session cookies. */
   sessionApi: ParaBankApiClient;
   /** Full identity of the customer the `setup` project registered. */
@@ -68,6 +70,9 @@ export const test = base.extend<PageFixtures>({
   },
   accountActivityPage: async ({ page }, use) => {
     await use(new AccountActivityPage(page));
+  },
+  updateProfilePage: async ({ page }, use) => {
+    await use(new UpdateProfilePage(page));
   },
   sessionApi: async ({ page }, use) => {
     await use(new ParaBankApiClient(page.request, env.appUrl, env.apiUrl, env.apiProxyUrl));
