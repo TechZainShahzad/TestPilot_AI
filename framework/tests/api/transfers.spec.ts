@@ -16,6 +16,11 @@ test.describe('transfers API @regression @api', () => {
     apiClient,
     registeredUser,
   }) => {
+    // Read the real starting balance rather than assuming one: this demo's
+    // registration balance is not a documented, stable contract — see the
+    // comment in accounts.spec.ts for the live evidence it changed mid-project.
+    const checkingBefore = await apiClient.getAccount(registeredUser.checkingAccountId);
+
     // openAccount itself debits the funding account FORCED_OPENING_DEPOSIT
     // and credits it to the new account — see
     // tests/support/isolated-account.ts — so both accounts' math below
@@ -31,7 +36,7 @@ test.describe('transfers API @regression @api', () => {
 
     const checking = await apiClient.getAccount(registeredUser.checkingAccountId);
     const updatedSavings = await apiClient.getAccount(savings.id);
-    expect(checking.balance).toBe(100_000 - FORCED_OPENING_DEPOSIT - 300);
+    expect(checking.balance).toBe(checkingBefore.balance - FORCED_OPENING_DEPOSIT - 300);
     expect(updatedSavings.balance).toBe(FORCED_OPENING_DEPOSIT + 300);
   });
 
@@ -59,9 +64,13 @@ test.describe('transfers API @regression @api', () => {
       'SAVINGS',
       registeredUser.checkingAccountId
     );
+    // Captured after openAccount's own $100 forced-deposit debit, so the
+    // only delta this measures is the negative transfer itself — keeping
+    // this test.fail() a reliable signal if ParaBank ever starts validating.
+    const checkingBefore = await apiClient.getAccount(registeredUser.checkingAccountId);
     await apiClient.transfer(registeredUser.checkingAccountId, savings.id, -500);
 
     const checking = await apiClient.getAccount(registeredUser.checkingAccountId);
-    expect(checking.balance).toBe(100_000);
+    expect(checking.balance).toBe(checkingBefore.balance);
   });
 });
