@@ -28,8 +28,8 @@ A human merges. Nothing is ever pushed straight to `main`.
 | 2     | Framework core (pages, fixtures, API, data) + smoke | ✅ Done    |
 | 3     | Full regression coverage + Allure on Pages          | ✅ Done    |
 | 4     | Orchestrator: provider layer, Explorer, Planner     | ✅ Done    |
-| 5     | Orchestrator: Generator, Executor, Healer           | 🚧 Next    |
-| 6     | Orchestrator: Reviewer, Reporter, PR creation       | ⬜ Planned |
+| 5     | Orchestrator: Generator, Executor, Healer           | ✅ Done    |
+| 6     | Orchestrator: Reviewer, Reporter, PR creation       | 🚧 Next    |
 | 7     | Documentation polish + committed example run        | ⬜ Planned |
 
 ---

@@ -1,10 +1,11 @@
 # Agents
 
-> **Status.** Explorer and Planner (phase 4) are implemented — see
-> [`orchestrator/src/agents/explorer.ts`](../orchestrator/src/agents/explorer.ts)
-> and [`planner.ts`](../orchestrator/src/agents/planner.ts) for their actual
-> system prompts. Generator, Executor, Healer, Reviewer, and Reporter
-> (phases 5–6) are specified below as contracts but not yet built.
+> **Status.** Explorer, Planner, Generator, Executor, and Healer (phases 4–5)
+> are implemented — see [`orchestrator/src/agents/`](../orchestrator/src/agents/)
+> and [`core/executor.ts`](../orchestrator/src/core/executor.ts) for their
+> actual system prompts and logic. The pipeline runs Explore → Plan →
+> Generate → Execute ⇄ Heal end to end. Reviewer and Reporter (phase 6) are
+> specified below as contracts but not yet built.
 
 ## Pipeline
 
@@ -45,6 +46,17 @@ strictly worse than a red one, because it is silent. So the Healer's remit is
 locators, waits and setup; a failure that cannot be fixed within that remit is
 escalated as a _suspected application bug_, which is a legitimate and useful
 output rather than a dead end.
+
+This is enforced, not just prompted. The Healer's `write_file` tool
+([`tools/file-tools.ts`](../orchestrator/src/tools/file-tools.ts)) counts
+`expect(...)` occurrences in the file it would replace and in the proposed
+replacement; if the count would drop, the write is rejected and the tool
+result explains why, handed straight back to the model as the next turn's
+input. The system prompt still states the rule — the model should not _try_
+to weaken an assertion, not just fail when it does — but the guarantee does
+not depend on the model reading or obeying the prompt. Verified directly: a
+scripted attempt to overwrite a spec with an assertion removed is rejected by
+`write_file` and the file on disk is provably unchanged afterward.
 
 **Suspected app bugs are reported, never hidden.** The whole value of an
 automated healer is destroyed if it can make real defects disappear. Every

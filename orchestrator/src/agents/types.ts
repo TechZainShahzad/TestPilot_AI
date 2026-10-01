@@ -72,3 +72,58 @@ export const testPlanSchema = z.object({
   cases: z.array(testCaseSchema),
 });
 export type TestPlan = z.infer<typeof testPlanSchema>;
+
+// ---------------------------------------------------------------- Generator --
+
+export const generatedFileSchema = z.object({
+  path: z.string().describe('File path relative to framework/, e.g. "tests/ui/bill-pay.spec.ts"'),
+  reason: z.string().describe('Why this file was created or changed'),
+});
+export type GeneratedFile = z.infer<typeof generatedFileSchema>;
+
+export const generationResultSchema = z.object({
+  summary: z.string(),
+  filesWritten: z.array(generatedFileSchema),
+  reusedPageObjects: z
+    .array(z.string())
+    .describe('Existing page objects/fixtures reused rather than duplicated'),
+});
+export type GenerationResult = z.infer<typeof generationResultSchema>;
+
+// ----------------------------------------------------------------- Executor --
+
+export const testStatusSchema = z.enum(['passed', 'failed', 'timedOut', 'skipped', 'interrupted']);
+export type TestStatus = z.infer<typeof testStatusSchema>;
+
+export const testResultSchema = z.object({
+  file: z.string(),
+  title: z.string(),
+  status: testStatusSchema,
+  durationMs: z.number(),
+  error: z.string().optional(),
+});
+export type TestResult = z.infer<typeof testResultSchema>;
+
+export const executionResultSchema = z.object({
+  attempt: z.number(),
+  passed: z.number(),
+  failed: z.number(),
+  skipped: z.number(),
+  tests: z.array(testResultSchema),
+});
+export type ExecutionResult = z.infer<typeof executionResultSchema>;
+
+// ------------------------------------------------------------------- Healer --
+
+export const healingVerdictSchema = z.object({
+  test: z.string().describe("The failing test's title"),
+  verdict: z.enum(['fixed', 'suspected_app_bug', 'could_not_diagnose']),
+  explanation: z.string(),
+});
+export type HealingVerdict = z.infer<typeof healingVerdictSchema>;
+
+export const healingResultSchema = z.object({
+  attempt: z.number(),
+  verdicts: z.array(healingVerdictSchema),
+});
+export type HealingResult = z.infer<typeof healingResultSchema>;

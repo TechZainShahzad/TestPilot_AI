@@ -5,14 +5,16 @@
  *   npm run orchestrate -- --url https://parabank.parasoft.com --feature "Bill Pay"
  *   npm run orchestrate -- --feature "Transfer Funds" --dry-run
  *
- * The pipeline itself (Explore → Plan → Generate → Execute → Heal → Review →
- * Report) lands in phases 4–6. This file owns argument parsing, option
- * validation and the preflight check, so the contract the rest of the
- * orchestrator is written against is fixed before the agents exist.
+ * The pipeline (Explore → Plan → Generate → Execute ⇄ Heal) runs end to end;
+ * Review and Report (phase 6) are not wired up yet. This file owns argument
+ * parsing, the preflight check, and the stage-by-stage orchestration.
  */
 import { runExplorer } from './agents/explorer.js';
+import { runGenerator } from './agents/generator.js';
+import { runHealer } from './agents/healer.js';
 import { runPlanner } from './agents/planner.js';
 import { PROVIDERS, apiKeyEnvVar, activeApiKey, config, type ProviderName } from './core/config.js';
+import { runExecutor } from './core/executor.js';
 import { RunContext } from './core/run.js';
 import { createProvider } from './providers/index.js';
 import { LOG_LEVELS, banner, createLogger, setLogLevel, type LogLevel } from './util/logger.js';
@@ -239,6 +241,47 @@ async function main(): Promise<void> {
   const plan = await runPlanner({ provider, run, feature: options.feature, exploration });
   log.info(`Planner produced ${String(plan.cases.length)} test case(s).`);
 
+  banner('Generate');
+  const generation = await runGenerator({ provider, run, plan, exploration });
+  const specFiles = generation.filesWritten
+    .map((f) => f.path)
+    .filter((path) => path.endsWith('.spec.ts'));
+  log.info(
+    `Generator wrote ${String(generation.filesWritten.length)} file(s), ${String(specFiles.length)} of them spec files.`
+  );
+  if (specFiles.length === 0) {
+    throw new Error('Generator produced no spec files — nothing to execute.');
+  }
+
+  banner('Execute');
+  let attempt = 1;
+  let execution = await runExecutor({ run, specFiles, attempt });
+  log.info(
+    `Attempt ${String(attempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
+  );
+
+  while (execution.failed > 0 && attempt <= options.maxHealAttempts) {
+    banner(`Heal (attempt ${String(attempt)})`);
+    const healing = await runHealer({ provider, run, execution, attempt });
+    for (const verdict of healing.verdicts) {
+      log.info(`  ${verdict.verdict}: ${verdict.test}`);
+    }
+
+    attempt += 1;
+    banner(`Execute (attempt ${String(attempt)})`);
+    execution = await runExecutor({ run, specFiles, attempt });
+    log.info(
+      `Attempt ${String(attempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
+    );
+  }
+
+  if (execution.failed > 0) {
+    log.warn(
+      `${String(execution.failed)} test(s) still failing after ${String(options.maxHealAttempts)} heal attempt(s) — ` +
+        'see the last healing-*.json for suspected-app-bug / could-not-diagnose verdicts.'
+    );
+  }
+
   const { usage, estimatedUsd } = run.totals();
   log.info(
     `Tokens used: ${String(usage.totalTokens)} (prompt ${String(usage.promptTokens)}, ` +
@@ -246,8 +289,8 @@ async function main(): Promise<void> {
   );
 
   log.warn(
-    'Generate / Execute / Heal / Review / Report are not wired up yet (phases 5–6). ' +
-      `Exploration and plan are saved in ${run.dir}.`
+    'Review / Report are not wired up yet (phase 6). ' +
+      `All artifacts so far are saved in ${run.dir}.`
   );
 }
 
