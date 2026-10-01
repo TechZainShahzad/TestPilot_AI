@@ -2,8 +2,8 @@
 /**
  * TestPilot_AI orchestrator — command line entry point.
  *
- *   npm run orchestrate -- --url https://parabank.parasoft.com --feature "Bill Pay"
- *   npm run orchestrate -- --feature "Transfer Funds" --dry-run
+ *   npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
+ *   npm run orchestrate -- --feature "Product Sorting" --dry-run
  *
  * The pipeline (Explore → Plan → Generate → Execute ⇄ Heal) runs end to end;
  * Review and Report (phase 6) are not wired up yet. This file owns argument
@@ -51,7 +51,7 @@ Usage:
   npm run orchestrate -- --feature <name> [options]
 
 Required:
-  -f, --feature <name>      Feature to cover, e.g. "Bill Pay"
+  -f, --feature <name>      Feature to cover, e.g. "Checkout Flow"
 
 Options:
   -u, --url <url>           Target application URL
@@ -65,8 +65,8 @@ Options:
   -h, --help                Show this message
 
 Examples:
-  npm run orchestrate -- --url https://parabank.parasoft.com --feature "Bill Pay"
-  npm run orchestrate -- --feature "Transfer Funds" --dry-run --log-level debug
+  npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
+  npm run orchestrate -- --feature "Product Sorting" --dry-run --log-level debug
 `;
 
 class UsageError extends Error {}

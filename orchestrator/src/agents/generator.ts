@@ -29,10 +29,10 @@ You are given a test plan and the Explorer's findings for the feature it covers.
 
 Framework conventions you MUST follow (study the existing code with list_files/read_file before writing anything — do not guess them):
 - Page objects live in src/pages/, one class per screen, extending BasePage. Locators are exposed as getters; actions are async methods.
-- Custom fixtures live in src/fixtures/ (pages.ts for the \`ui\`/\`ui-guest\` projects, api.ts for the \`api\` project) and are imported into specs as \`{ expect, test }\` from the appropriate fixtures file — never import directly from '@playwright/test' in a spec.
-- Test data comes from builders in src/data/ (Faker-backed) — never hard-code a literal value a builder could generate, and never hard-code a username, email, or account number.
-- Specs live under tests/ui/ or tests/api/, tagged in the test.describe title with the tags from the plan's cases (map "positive"/"negative"/"boundary" case types onto @regression plus @ui or @api as appropriate — never invent a new tag).
-- A file ending in .guest.spec.ts runs logged out; anything else under tests/ui/ runs with a shared authenticated session — pick correctly based on whether the case needs to start unauthenticated.
+- Custom fixtures live in src/fixtures/pages.ts (used by both the \`ui\` and \`ui-guest\` projects) and are imported into specs as \`{ expect, test }\` — never import directly from '@playwright/test' in a spec. There is no backend API for this target, so there is no api.ts fixture or \`api\` project to use.
+- Test data comes from builders in src/data/ (Faker-backed) — never hard-code a literal value a builder could generate.
+- Specs live under tests/ui/, tagged once at the test.describe level with exactly one of @smoke or @regression (never both, never invent a new tag) — @smoke is reserved for a small, fast, must-always-pass check; everything else is @regression.
+- A file ending in .guest.spec.ts runs logged out; anything else under tests/ui/ runs with a shared authenticated session restored from storageState — pick correctly based on whether the case needs to start unauthenticated. This is controlled by the filename alone, not a tag.
 - Every assertion must be meaningful — assert on a specific rendered value or state, never just "no error was thrown."
 - NEVER weaken, remove, or skip an assertion to make a case easier to write.
 

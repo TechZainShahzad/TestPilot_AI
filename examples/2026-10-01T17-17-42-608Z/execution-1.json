@@ -1,0 +1,44 @@
+{
+  "attempt": 1,
+  "passed": 6,
+  "failed": 0,
+  "skipped": 0,
+  "tests": [
+    {
+      "file": "auth.setup.ts",
+      "title": "log in as the configured demo account and save the session",
+      "status": "passed",
+      "durationMs": 1151
+    },
+    {
+      "file": "ui/product-detail.spec.ts",
+      "title": "viewing a product shows its name, description, and price",
+      "status": "passed",
+      "durationMs": 2370
+    },
+    {
+      "file": "ui/product-detail.spec.ts",
+      "title": "adding to cart from the detail page updates the button and badge",
+      "status": "passed",
+      "durationMs": 2331
+    },
+    {
+      "file": "ui/product-detail.spec.ts",
+      "title": "removing from the detail page reverts the button and clears the badge",
+      "status": "passed",
+      "durationMs": 2287
+    },
+    {
+      "file": "ui/product-detail.spec.ts",
+      "title": "back to products returns to the full inventory listing",
+      "status": "passed",
+      "durationMs": 2354
+    },
+    {
+      "file": "ui/product-detail.spec.ts",
+      "title": "the add/remove toggle is consistent across repeated use",
+      "status": "passed",
+      "durationMs": 2496
+    }
+  ]
+}

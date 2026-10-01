@@ -13,7 +13,6 @@
     // resolved relative to this file instead.
     "paths": {
       "@pages/*": ["./src/pages/*"],
-      "@api/*": ["./src/api/*"],
       "@fixtures/*": ["./src/fixtures/*"],
       "@data/*": ["./src/data/*"],
       "@utils/*": ["./src/utils/*"]

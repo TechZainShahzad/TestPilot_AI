@@ -5,8 +5,8 @@
 [![Live Allure report](https://img.shields.io/badge/Allure-live%20report-blue)](https://TechZainShahzad.github.io/TestPilot_AI/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**A production-grade Playwright + TypeScript framework for a demo banking
-app — and a multi-agent orchestrator that writes it.**
+**A production-grade Playwright + TypeScript framework for a demo
+e-commerce app — and a multi-agent orchestrator that writes it.**
 
 Point the orchestrator at a URL and a feature name. It explores the app in a
 real browser, plans positive/negative/boundary cases, writes page objects and
@@ -22,15 +22,15 @@ A human merges. Nothing is ever pushed straight to `main`.
 > Built in phases. This section tracks what is actually working, not what is
 > planned.
 
-| Phase | Scope                                               | Status  |
-| ----- | --------------------------------------------------- | ------- |
-| 1     | Repo scaffold, tooling, CI skeleton                 | ✅ Done |
-| 2     | Framework core (pages, fixtures, API, data) + smoke | ✅ Done |
-| 3     | Full regression coverage + Allure on Pages          | ✅ Done |
-| 4     | Orchestrator: provider layer, Explorer, Planner     | ✅ Done |
-| 5     | Orchestrator: Generator, Executor, Healer           | ✅ Done |
-| 6     | Orchestrator: Reviewer, Reporter, PR creation       | ✅ Done |
-| 7     | Documentation polish + committed example run        | ✅ Done |
+| Phase | Scope                                           | Status  |
+| ----- | ----------------------------------------------- | ------- |
+| 1     | Repo scaffold, tooling, CI skeleton             | ✅ Done |
+| 2     | Framework core (pages, fixtures, data) + smoke  | ✅ Done |
+| 3     | Full regression coverage + Allure on Pages      | ✅ Done |
+| 4     | Orchestrator: provider layer, Explorer, Planner | ✅ Done |
+| 5     | Orchestrator: Generator, Executor, Healer       | ✅ Done |
+| 6     | Orchestrator: Reviewer, Reporter, PR creation   | ✅ Done |
+| 7     | Documentation polish + committed example run    | ✅ Done |
 
 ---
 
@@ -59,12 +59,11 @@ flowchart LR
   subgraph FW["framework/ — Playwright suite"]
     direction TB
     PO["Page objects<br/><sub>BasePage + one per screen</sub>"]
-    FIX["Fixtures<br/><sub>pages, API client, auth session</sub>"]
-    API["Typed API client<br/><sub>setup/teardown + API specs</sub>"]
+    FIX["Fixtures<br/><sub>pages, auth session</sub>"]
     DAT["Data builders<br/><sub>Faker factories</sub>"]
   end
 
-  APP["🏦 ParaBank<br/><sub>UI + REST</sub>"]
+  APP["🛒 SauceDemo<br/><sub>UI only, no backend API</sub>"]
   PR["🔀 Pull request<br/><sub>human review</sub>"]
 
   EX -.->|"browses"| APP
@@ -107,8 +106,7 @@ use the orchestrator.
 npm test                  # everything
 npm run test:smoke        # @smoke — the CI gate
 npm run test:regression   # @regression — the nightly suite
-npm run test:ui           # @ui only
-npm run test:api          # @api only
+npm run test:guest        # the unauthenticated slice only
 
 npm run report            # open the last Playwright HTML report
 npm run allure:serve --workspace=framework   # Allure report, locally
@@ -122,8 +120,8 @@ its title rather than hidden in config.
 ```bash
 cp .env.example .env      # then set GEMINI_API_KEY (free — see below)
 
-npm run orchestrate -- --url https://parabank.parasoft.com --feature "Bill Pay"
-npm run orchestrate -- --feature "Transfer Funds" --dry-run
+npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
+npm run orchestrate -- --feature "Product Sorting" --dry-run
 ```
 
 `--dry-run` plans, generates and runs the tests but never opens a pull
@@ -158,13 +156,14 @@ The agents talk through a narrow interface (`chat`, `tools`, token accounting)
 with Gemini and Groq implementations behind it. Both have usable free tiers,
 which matters for a project people are meant to clone and actually run.
 
-**Why a fresh customer per run.**
-ParaBank is a shared public demo whose data resets on someone else's schedule,
-and the balance-consistency specs assert that a UI balance matches an API
-balance after a transfer. Against a shared account that assertion is a coin
-flip. Each run registers its own Faker-generated customer and reuses the
-session via `storageState`, so it logs in once and is immune to other people's
-traffic.
+**Why fixed demo accounts instead of generated ones.**
+SauceDemo has no registration flow at all — every identity is one of its
+fixed accounts (`standard_user`, plus deliberately-broken variants like
+`locked_out_user` and `problem_user`), all sharing the password
+`secret_sauce`. The `setup` project logs in once as the account configured
+in `.env` and reuses that session via `storageState`, the same mechanic the
+original ParaBank build used for a per-run registered customer — just with
+nothing left to generate.
 
 **Why `strict` plus six more compiler flags.**
 `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are what stop a
@@ -172,17 +171,13 @@ page object from quietly handing back `any` out of a locator chain.
 `no-floating-promises` is an error rather than a warning because a missing
 `await` on a Playwright action does not fail — it silently passes.
 
-**Why the API client doesn't correct what it reads.**
-`createAccount` reports a new account's balance as `0` — but it actually
-debits the funding account exactly $100 and credits it to the new one,
-confirmed by reading both accounts' transaction history immediately
-afterward. The client returns that stale `0` as-is rather than quietly
-fixing it, because the whole point of a typed client here is to reflect what
-the real API does, quirks included; the test-data helpers that need the true
-balance account for it explicitly instead. See "Known application
-limitations" in [`docs/architecture.md`](docs/architecture.md) — found by
-writing real regression tests against the live app, not by reading docs that
-don't exist for this API.
+**Why there's no API layer.**
+SauceDemo has no backend REST API — confirmed live, zero XHR/fetch calls
+across a full login → checkout flow. The original ParaBank build had a
+typed API client and a parallel `api` test project; neither carries over to
+this target, and that's stated here explicitly rather than left for a reader
+to notice from the repository layout. See "Why there's no API layer" in
+[`docs/architecture.md`](docs/architecture.md).
 
 Fuller reasoning lives in [`docs/architecture.md`](docs/architecture.md); each
 agent's prompts, I/O contract and guardrails are in
@@ -195,12 +190,10 @@ agent's prompts, I/O contract and guardrails are in
 ```
 framework/              Playwright suite — stands alone
   src/pages/            BasePage + one page object per screen
-  src/api/              Typed ParaBank REST client
-  src/fixtures/         Custom fixtures: page objects, API client, auth
+  src/fixtures/         Custom fixtures: page objects, auth session
   src/data/             Faker-backed builders and factories
   src/utils/            Config, logging, shared helpers
-  tests/ui/             Browser specs
-  tests/api/            Pure REST specs
+  tests/ui/             Browser specs (no tests/api/ — see "Target application" below)
   playwright.config.ts
 
 orchestrator/           Multi-agent pipeline — a client of the framework
@@ -235,10 +228,21 @@ as `GITHUB_TOKEN`. Without it the orchestrator runs in dry-run mode.
 
 ## Target application
 
-[ParaBank](https://parabank.parasoft.com) by Parasoft — a public demo banking
-app with both a UI and a REST API. It is used purely as a realistic
-fintech-shaped target. No real company code, credentials or data appear
-anywhere in this repository.
+[SauceDemo](https://www.saucedemo.com) by Sauce Labs — a public demo
+e-commerce app (login → product catalog → cart → checkout) built as a QA
+training target, with no backend REST API. It ships several deliberately
+broken demo accounts (`problem_user`, `locked_out_user`, and others) as a
+testing exercise; the ones this suite found to have reproducible,
+distinguishing behavior are documented and covered under "Known application
+limitations" in [`docs/architecture.md`](docs/architecture.md). No real
+company code, credentials or data appear anywhere in this repository.
+
+This project originally targeted [ParaBank](https://parabank.parasoft.com),
+a demo banking app with a REST API. It moved to SauceDemo after ParaBank's
+shared Cloudflare-fronted demo temporarily rate-limited a developer's own
+browser — automated testing itself was unaffected throughout. The API-layer
+coverage ParaBank made possible does not carry over to this target; see
+"Why there's no API layer" above.
 
 ---
 

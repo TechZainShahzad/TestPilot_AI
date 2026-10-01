@@ -2,7 +2,7 @@
   "name": "testpilot-ai",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-orchestrated Playwright automation framework: a production-grade test suite for a demo banking app, plus a multi-agent orchestrator that writes, runs, heals and reviews the tests.",
+  "description": "AI-orchestrated Playwright automation framework: a production-grade test suite for the SauceDemo e-commerce app, plus a multi-agent orchestrator that writes, runs, heals and reviews the tests.",
   "license": "MIT",
   "author": "Muhammad Zain Shahzad",
   "repository": {
@@ -25,8 +25,7 @@
     "test": "npm run test --workspace=framework",
     "test:smoke": "npm run test:smoke --workspace=framework",
     "test:regression": "npm run test:regression --workspace=framework",
-    "test:ui": "npm run test:ui --workspace=framework",
-    "test:api": "npm run test:api --workspace=framework",
+    "test:guest": "npm run test:guest --workspace=framework",
     "report": "npm run report --workspace=framework",
     "allure:generate": "npm run allure:generate --workspace=framework",
     "allure:open": "npm run allure:open --workspace=framework",

@@ -1,6 +1,7 @@
 /**
- * Parses ParaBank's rendered currency text (`"$1,234.56"`, `"-$5.00"`) into a
- * number, so UI assertions can compare against the API's raw numeric balance.
+ * Parses rendered currency text (e.g. `"Total: $43.18"`, `"-$5.00"`) into a
+ * number, stripping any label prefix, so specs can assert on amounts without
+ * hand-parsing the string themselves.
  */
 export function parseCurrency(text: string): number {
   const trimmed = text.trim();

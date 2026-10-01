@@ -1,47 +1,31 @@
 /**
- * The `setup` project: registers one fresh customer through the real UI
- * (not an API shortcut — this is the one place where going through the
- * browser matters, since what gets saved is the browser's own session) and
- * persists two things for the rest of the run:
- *
- *   - `.auth/user.json`        — `storageState`, reused by every `ui` spec
- *   - `.auth/user.credentials.json` — the plaintext username/password, for
- *     any spec that needs to re-derive its own customer id via the API
- *
- * ParaBank's data resets on a schedule outside this project's control, which
- * is exactly why this runs once per `playwright test` invocation rather than
- * relying on a fixed, committed account.
+ * The `setup` project: logs in once as the configured SauceDemo demo
+ * account (`env.sauceUsername`/`env.saucePassword`, default
+ * `standard_user`/`secret_sauce`) and saves `storageState` for every `ui`
+ * spec to reuse. There is no registration step — SauceDemo's accounts are
+ * fixed, so unlike a per-run-registered identity there is nothing to
+ * persist beyond the session itself.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { buildNewCustomer } from '@data/customer-builder.js';
+import { env } from '@utils/env.js';
 
 import { expect, test } from '../src/fixtures/pages.js';
 
 const AUTH_FILE = '.auth/user.json';
-const CREDENTIALS_FILE = '.auth/user.credentials.json';
-
-export interface StoredCredentials {
-  username: string;
-  password: string;
-}
 
 test.describe('authentication setup', () => {
-  test('register a fresh customer and save the session', async ({ page, registerPage }) => {
-    const customer = buildNewCustomer();
-
-    await registerPage.goto();
-    await registerPage.register(customer);
-    await expect(registerPage.successHeading).toBeVisible();
+  test('log in as the configured demo account and save the session', async ({
+    page,
+    loginPage,
+    inventoryPage,
+  }) => {
+    await loginPage.goto();
+    await loginPage.login(env.sauceUsername, env.saucePassword);
+    await expect(inventoryPage.items.first()).toBeVisible();
 
     mkdirSync(dirname(AUTH_FILE), { recursive: true });
     await page.context().storageState({ path: AUTH_FILE });
-
-    const credentials: StoredCredentials = {
-      username: customer.username,
-      password: customer.password,
-    };
-    writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
   });
 });

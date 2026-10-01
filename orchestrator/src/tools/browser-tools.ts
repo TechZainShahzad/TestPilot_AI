@@ -16,6 +16,37 @@ import { zodToToolParameters } from '../core/schema.js';
 
 const MAX_SNAPSHOT_CHARS = 12_000;
 
+/**
+ * Polls the ARIA snapshot until it differs from `before` or `timeoutMs`
+ * elapses. `networkidle` alone is not a sufficient completion condition for
+ * a client-side-routed SPA — confirmed live against SauceDemo, where a
+ * product-detail navigation and a login both settle `networkidle` well
+ * before the React re-render that actually changes the accessibility tree.
+ *
+ * The poll interval matters more than it looks: calling `ariaSnapshot()`
+ * again in rapid succession (checked at 100ms) kept returning the exact
+ * same stale tree for 4+ seconds straight — confirmed live — while a single
+ * call after one real ~200ms gap reliably picked up the change. Whatever
+ * Playwright's internal caching for this is, it does not get busier the
+ * more often you ask; it needs a real gap between calls. 400ms intervals
+ * were reliable across repeated live runs.
+ */
+async function waitForSnapshotChange(
+  page: Page,
+  before: string,
+  timeoutMs = 4000
+): Promise<string> {
+  const intervalMs = 400;
+  const start = Date.now();
+  let current = before;
+  while (Date.now() - start < timeoutMs) {
+    await page.waitForTimeout(intervalMs);
+    current = await page.ariaSnapshot({ mode: 'ai' });
+    if (current !== before) return current;
+  }
+  return current;
+}
+
 const navigateArgs = z.object({
   url: z.string().describe('Absolute URL, or a path relative to the current page'),
 });
@@ -36,8 +67,17 @@ const selectOptionArgs = z.object({
 
 /** Builds the Explorer's tool set against one live page. */
 export function createBrowserTools(page: Page): ToolImplementation[] {
-  const snapshot = async (): Promise<unknown> => {
-    const aria = await page.ariaSnapshot({ mode: 'ai' });
+  // Tracks the last snapshot text handed back by any tool, so click/
+  // select_option can diff against it without taking a fresh ariaSnapshot()
+  // first — doing that would regenerate every `[ref=eN]` in the tree and
+  // invalidate the very ref the caller is about to click, since refs are
+  // scoped to the snapshot call that produced them, not to the underlying
+  // DOM node. Confirmed live: adding a pre-click snapshot for comparison
+  // made clicks silently land on the wrong element.
+  let lastSnapshotText = '';
+
+  const describe = async (aria: string): Promise<unknown> => {
+    lastSnapshotText = aria;
     const truncated = aria.length > MAX_SNAPSHOT_CHARS;
     return {
       url: page.url(),
@@ -45,6 +85,8 @@ export function createBrowserTools(page: Page): ToolImplementation[] {
       snapshot: truncated ? `${aria.slice(0, MAX_SNAPSHOT_CHARS)}\n… (truncated)` : aria,
     };
   };
+
+  const snapshot = async (): Promise<unknown> => describe(await page.ariaSnapshot({ mode: 'ai' }));
 
   return [
     {
@@ -77,9 +119,10 @@ export function createBrowserTools(page: Page): ToolImplementation[] {
       },
       execute: async (args) => {
         const { ref } = clickArgs.parse(args);
+        const before = lastSnapshotText;
         await page.locator(`aria-ref=${ref}`).click();
         await page.waitForLoadState('networkidle').catch(() => undefined);
-        return snapshot();
+        return describe(await waitForSnapshotChange(page, before));
       },
     },
     {
@@ -102,8 +145,9 @@ export function createBrowserTools(page: Page): ToolImplementation[] {
       },
       execute: async (args) => {
         const { ref, value } = selectOptionArgs.parse(args);
+        const before = lastSnapshotText;
         await page.locator(`aria-ref=${ref}`).selectOption(value);
-        return snapshot();
+        return describe(await waitForSnapshotChange(page, before));
       },
     },
     {

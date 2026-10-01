@@ -200,7 +200,7 @@ human present throughout.
 
 **Where this orchestrator is a different tool, not a bigger version of theirs:**
 
-- **Unattended vs. interactive.** `npm run orchestrate -- --feature "Bill Pay"`
+- **Unattended vs. interactive.** `npm run orchestrate -- --feature "Checkout Flow"`
   runs Explore → Plan → Generate → Execute → Heal → Review → Report to
   completion with no human in the loop until the PR review. Their agents are
   invoked one at a time by a person in an IDE chat; nothing strings them into

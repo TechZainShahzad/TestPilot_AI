@@ -51,12 +51,10 @@ const optionalInteger = z
 
 const envSchema = z.object({
   TEST_ENV: z.enum(['demo', 'local']).default('demo'),
-  BASE_URL: z.url().default('https://parabank.parasoft.com'),
+  BASE_URL: z.url().default('https://www.saucedemo.com'),
 
-  USE_FIXED_USER: booleanish(false),
-  FIXED_USERNAME: z.string().optional(),
-  FIXED_PASSWORD: z.string().optional(),
-  DEFAULT_PASSWORD: z.string().min(1).default('Passw0rd!23'),
+  SAUCE_USERNAME: z.string().min(1).default('standard_user'),
+  SAUCE_PASSWORD: z.string().min(1).default('secret_sauce'),
 
   HEADLESS: booleanish(true),
   SLOW_MO: integerish(0),
@@ -81,22 +79,6 @@ if (!parsed.success) {
 
 const raw = parsed.data;
 
-/**
- * A fixed user is only honoured when it is actually complete. Half-filled
- * credentials would otherwise produce a confusing login failure rather than
- * silently falling back to the per-run registration path.
- */
-const fixedUser =
-  raw.USE_FIXED_USER && raw.FIXED_USERNAME && raw.FIXED_PASSWORD
-    ? { username: raw.FIXED_USERNAME, password: raw.FIXED_PASSWORD }
-    : undefined;
-
-if (raw.USE_FIXED_USER && !fixedUser) {
-  throw new Error(
-    'USE_FIXED_USER=true requires both FIXED_USERNAME and FIXED_PASSWORD to be set in .env.'
-  );
-}
-
 const baseUrl = raw.BASE_URL.replace(/\/+$/, '');
 
 export const env = {
@@ -105,23 +87,13 @@ export const env = {
   /** Is this a CI run? Drives retries, workers, and artifact retention. */
   isCI: raw.CI,
 
-  /** Origin of the app under test, never with a trailing slash. */
+  /** Origin of the app under test, never with a trailing slash. SauceDemo serves at root. */
   baseUrl,
-  /** ParaBank serves the whole app under a `/parabank` context path. */
-  appUrl: `${baseUrl}/parabank`,
-  /** Root of the public REST API (`/services/bank/...`). */
-  apiUrl: `${baseUrl}/parabank/services`,
-  /**
-   * Session-authenticated JSON API. ParaBank exposes the same resources twice:
-   * `/services` (mostly XML, partly unauthenticated) and `/services_proxy`
-   * (JSON, requires the JSESSIONID cookie from a UI login).
-   */
-  apiProxyUrl: `${baseUrl}/parabank/services_proxy/bank`,
+  appUrl: baseUrl,
 
-  /** When set, reuse this pre-registered customer instead of making one. */
-  fixedUser,
-  /** Password assigned to every generated customer. */
-  defaultPassword: raw.DEFAULT_PASSWORD,
+  /** SauceDemo has no registration — every run authenticates as one of its fixed demo accounts. */
+  sauceUsername: raw.SAUCE_USERNAME,
+  saucePassword: raw.SAUCE_PASSWORD,
 
   headless: raw.HEADLESS,
   slowMo: raw.SLOW_MO,

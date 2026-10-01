@@ -79,7 +79,7 @@ jobs:
       - name: Run @smoke
         run: npm run test:smoke
         env:
-          BASE_URL: https://parabank.parasoft.com
+          BASE_URL: https://www.saucedemo.com
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}

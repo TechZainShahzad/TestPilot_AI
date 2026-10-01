@@ -3,21 +3,26 @@ import { defineConfig, devices } from '@playwright/test';
 import { env } from './src/utils/env.js';
 
 /**
- * Playwright configuration for the ParaBank suite.
+ * Playwright configuration for the SauceDemo suite.
  *
  * Project layout and the reasoning behind it:
  *
- *   setup    — registers a fresh customer and writes `storageState` once, so
- *              the UI projects never pay for a login. ParaBank resets its
- *              data periodically, which is exactly why the user is created
- *              per run rather than committed.
- *   api      — pure REST tests. No browser, so they run first and fast.
+ *   setup    — logs in as the configured fixed demo account and writes
+ *              `storageState` once, so the UI projects never pay for a
+ *              login. SauceDemo has no registration flow, so unlike a
+ *              per-run-registered identity there is one fixed account
+ *              (or one of its deliberately-broken variants) to start from.
  *   ui       — browser tests, depending on `setup` and reusing its session.
  *   ui-guest — the slice of UI tests that must start unauthenticated
- *              (registration, invalid login, empty fields), so they
- *              deliberately opt out of the stored session.
+ *              (login variants, locked-out account), so they deliberately
+ *              opt out of the stored session.
  *
- * Tags (`@smoke`, `@regression`, `@ui`, `@api`) are applied in the specs and
+ * There is no `api` project: SauceDemo has no backend REST API (confirmed
+ * live — zero XHR/fetch calls across a full login→checkout flow), so the
+ * original brief's API-layer requirement does not carry over to this
+ * target. See "Why there's no API layer" in docs/architecture.md.
+ *
+ * Tags (`@smoke`, `@regression`, `@guest`) are applied in the specs and
  * selected with `--grep`, which keeps suite membership visible in the test
  * title rather than hidden in config.
  */
@@ -87,10 +92,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
 
-    /* ParaBank's demo instance has an expired/self-signed cert at times. */
-    ignoreHTTPSErrors: true,
-
-    testIdAttribute: 'data-testid',
+    testIdAttribute: 'data-test',
   },
 
   projects: [
@@ -101,14 +103,6 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: env.headless,
         launchOptions: { slowMo: env.slowMo },
-      },
-    },
-
-    {
-      name: 'api',
-      testDir: './tests/api',
-      use: {
-        baseURL: env.appUrl,
       },
     },
 

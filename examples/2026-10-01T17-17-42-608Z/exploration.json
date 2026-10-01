@@ -1,0 +1,61 @@
+{
+  "feature": "Product Detail Page",
+  "targetUrl": "https://www.saucedemo.com",
+  "pages": [
+    {
+      "url": "https://www.saucedemo.com/inventory.html",
+      "title": "Swag Labs",
+      "purpose": "Product listing; each product links to its own detail page."
+    },
+    {
+      "url": "https://www.saucedemo.com/inventory-item.html?id=4",
+      "title": "Swag Labs",
+      "purpose": "A single product's detail view: name, full description, price, and an Add to cart/Remove toggle."
+    }
+  ],
+  "elements": [
+    {
+      "page": "inventory.html",
+      "role": "button",
+      "name": "View details for Sauce Labs Backpack",
+      "locatorHint": "getByRole('button', { name: 'View details for Sauce Labs Backpack' }).first()",
+      "purpose": "Navigates from the inventory grid to this product's detail page."
+    },
+    {
+      "page": "inventory-item.html",
+      "role": "generic",
+      "name": "Sauce Labs Backpack / description / $29.99",
+      "locatorHint": "page.locator('[data-test=\"inventory-item-name\"]')",
+      "purpose": "Name, description, and price on the detail page — same data-test attributes as the inventory grid and cart."
+    },
+    {
+      "page": "inventory-item.html",
+      "role": "button",
+      "name": "Add to cart / Remove",
+      "locatorHint": "page.locator('[data-test=\"add-to-cart\"]') / page.locator('[data-test=\"remove\"]')",
+      "purpose": "Toggles the single product in view into/out of the cart. Unlike the grid (product-specific data-test like add-to-cart-sauce-labs-backpack), the detail page always uses the generic add-to-cart/remove ids since only one product is ever shown."
+    },
+    {
+      "page": "inventory-item.html",
+      "role": "button",
+      "name": "Back to products",
+      "locatorHint": "page.locator('[data-test=\"back-to-products\"]')",
+      "purpose": "Returns to the full inventory listing."
+    }
+  ],
+  "flows": [
+    {
+      "name": "View a product and add/remove it from the detail page",
+      "steps": [
+        "Log in as standard_user",
+        "Click a product's view-details link on the inventory page",
+        "Observe the detail page shows the same name, description, and price as the grid",
+        "Click Add to cart — button changes to Remove, cart badge increments",
+        "Click Remove — button reverts to Add to cart, badge clears",
+        "Click Add to cart, then Remove again — the toggle stays consistent across repeated use",
+        "Click Back to products — returns to the full inventory listing"
+      ]
+    }
+  ],
+  "notes": "Confirmed live: both the login click and the product-detail navigation are client-side route changes that settle page.waitForLoadState('networkidle') well before the React re-render that actually changes the accessibility tree — the click tool's own returned snapshot was repeatedly stale (still the previous page) until it was hardened to poll for a genuine snapshot change instead of trusting networkidle alone. The detail page reuses the inventory grid's data-test='inventory-item-name'/'inventory-item-price' attributes, but its Add to cart/Remove button always uses the generic data-test='add-to-cart'/'remove' rather than a product-specific id, since only one product is ever in view."
+}

@@ -65,7 +65,7 @@ const configSchema = z.object({
   GITHUB_REPO: z.string().default('TechZainShahzad/TestPilot_AI'),
   GITHUB_BASE_BRANCH: z.string().default('main'),
 
-  BASE_URL: z.url().default('https://parabank.parasoft.com'),
+  BASE_URL: z.url().default('https://www.saucedemo.com'),
 });
 
 const parsed = configSchema.safeParse(process.env);

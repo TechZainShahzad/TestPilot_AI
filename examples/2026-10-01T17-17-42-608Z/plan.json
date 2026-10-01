@@ -1,0 +1,78 @@
+{
+  "feature": "Product Detail Page",
+  "summary": "Covers viewing a product detail page, adding/removing it from the cart from that page, returning to the inventory listing, and repeated add/remove toggling.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Viewing a product's detail page shows its name, description, and price",
+      "type": "positive",
+      "priority": "P0",
+      "preconditions": [
+        "Logged in as standard_user",
+        "On the inventory page"
+      ],
+      "steps": [
+        "Click a product's view-details link",
+        "Read the name, description, and price on the detail page"
+      ],
+      "expected": "The detail page's name and price exactly match the product clicked, and a Back to products button is visible."
+    },
+    {
+      "id": "TC-02",
+      "title": "Adding to cart from the detail page updates the button and badge",
+      "type": "positive",
+      "priority": "P0",
+      "preconditions": [
+        "On a product detail page",
+        "Cart is empty"
+      ],
+      "steps": [
+        "Click Add to cart"
+      ],
+      "expected": "The button changes to Remove and the cart badge shows \"1\"."
+    },
+    {
+      "id": "TC-03",
+      "title": "Removing from the detail page reverts the button and clears the badge",
+      "type": "positive",
+      "priority": "P1",
+      "preconditions": [
+        "On a product detail page",
+        "The product was just added to the cart"
+      ],
+      "steps": [
+        "Click Remove"
+      ],
+      "expected": "The button reverts to Add to cart and the cart badge is gone."
+    },
+    {
+      "id": "TC-04",
+      "title": "Back to products returns to the full inventory listing",
+      "type": "positive",
+      "priority": "P1",
+      "preconditions": [
+        "On a product detail page"
+      ],
+      "steps": [
+        "Click Back to products"
+      ],
+      "expected": "The inventory page is shown with all 6 products listed."
+    },
+    {
+      "id": "TC-05",
+      "title": "The add/remove toggle is consistent across repeated use",
+      "type": "boundary",
+      "priority": "P2",
+      "preconditions": [
+        "On a product detail page",
+        "Cart is empty"
+      ],
+      "steps": [
+        "Click Add to cart",
+        "Click Remove",
+        "Click Add to cart again"
+      ],
+      "expected": "After the second Add to cart, the button shows Remove and the badge shows \"1\" — the same end state as a single add, with no drift from the repeated cycle."
+    }
+  ]
+}

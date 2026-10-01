@@ -1,55 +1,47 @@
-import { env } from '@utils/env.js';
-
-import { ParaBankApiClient } from '../../src/api/parabank-client.js';
-import { buildNewCustomer } from '../../src/data/customer-builder.js';
 import { expect, test } from '../../src/fixtures/pages.js';
 
 /**
- * No "locked account" case here: ParaBank implements no account-lockout
- * feature after repeated failed logins to probe — confirmed live, see
- * "Known application limitations" in docs/architecture.md. The brief's
- * "locked/empty fields" scenario is covered by the empty-fields case below.
+ * All error strings asserted here were captured live from the real app, not
+ * assumed from documentation — including the exact "Epic sadface: ..."
+ * wording, which SauceDemo does not publish anywhere.
  */
-test.describe('login @regression @ui', () => {
-  test('valid credentials log the customer in', async ({ request, loginPage }) => {
-    const apiClient = new ParaBankApiClient(request, env.appUrl, env.apiUrl, env.apiProxyUrl);
-    const customer = buildNewCustomer();
-    await apiClient.registerCustomer(customer);
-
+test.describe('login @regression', () => {
+  test('valid credentials log the demo account in', async ({ loginPage, inventoryPage }) => {
     await loginPage.goto();
-    await loginPage.login(customer.username, customer.password);
+    await loginPage.login('standard_user', 'secret_sauce');
 
-    await expect(loginPage.accountServicesMenu).toContainText(
-      `${customer.firstName} ${customer.lastName}`
-    );
+    await expect(inventoryPage.items).toHaveCount(6);
   });
 
-  test('an incorrect password is rejected', async ({ request, loginPage }) => {
-    const apiClient = new ParaBankApiClient(request, env.appUrl, env.apiUrl, env.apiProxyUrl);
-    const customer = buildNewCustomer();
-    await apiClient.registerCustomer(customer);
-
+  test('a locked-out account is rejected', async ({ loginPage }) => {
     await loginPage.goto();
-    await loginPage.login(customer.username, `wrong-${customer.password}`);
+    await loginPage.login('locked_out_user', 'secret_sauce');
 
     await expect(loginPage.errorMessage).toHaveText(
-      'The username and password could not be verified.'
+      'Epic sadface: Sorry, this user has been locked out.'
     );
   });
 
-  test('a username that has never been registered is rejected', async ({ loginPage }) => {
+  test('an incorrect password is rejected', async ({ loginPage }) => {
     await loginPage.goto();
-    await loginPage.login('no-such-user-ever', 'whatever123');
+    await loginPage.login('standard_user', 'wrong-password');
 
     await expect(loginPage.errorMessage).toHaveText(
-      'The username and password could not be verified.'
+      'Epic sadface: Username and password do not match any user in this service'
     );
   });
 
-  test('empty username and password are rejected', async ({ loginPage }) => {
+  test('an empty username is rejected', async ({ loginPage }) => {
     await loginPage.goto();
-    await loginPage.login('', '');
+    await loginPage.login('', 'secret_sauce');
 
-    await expect(loginPage.errorMessage).toHaveText('Please enter a username and password.');
+    await expect(loginPage.errorMessage).toHaveText('Epic sadface: Username is required');
+  });
+
+  test('an empty password is rejected', async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.login('standard_user', '');
+
+    await expect(loginPage.errorMessage).toHaveText('Epic sadface: Password is required');
   });
 });
