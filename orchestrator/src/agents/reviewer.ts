@@ -42,7 +42,9 @@ Read every file in the generation's file list with read_file, then check it agai
 - Every test has at least one meaningful assertion that checks a specific value or state, not just "no error was thrown."
 - Imports follow convention: specs import { expect, test } from the appropriate fixtures file, never directly from '@playwright/test'.
 
-Classify each issue you find as "blocking" (a real violation of the checklist above) or "advisory" (a style nit worth mentioning but not worth rejecting over). Verdict is "approved" only if there are zero blocking findings. When done, call ${SUBMIT_TOOL} exactly once.`;
+Classify each issue you find as "blocking" (a real violation of the checklist above) or "advisory" (a style nit worth mentioning but not worth rejecting over). Verdict is "approved" only if there are zero blocking findings. When done, call ${SUBMIT_TOOL} exactly once.
+
+CRITICAL: your verdict leaves this conversation ONLY through a ${SUBMIT_TOOL} tool call. Never answer with a plain-text or markdown review instead of calling the tool — a text-only reply is treated as a failure and discarded, no matter how complete it looks. If you believe you are done, your very next action must be a ${SUBMIT_TOOL} tool call, not a message.`;
 
 export interface ReviewerOptions {
   provider: LlmProvider;

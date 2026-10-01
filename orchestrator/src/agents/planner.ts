@@ -23,7 +23,9 @@ Rules:
 - Prioritise: P0 for the primary happy path and any case guarding money/data integrity, P1 for important negative/boundary cases, P2 for edge cases that are good to have but not critical.
 - Every case's "steps" must be executable using only the elements and flows the Explorer actually recorded — reference them by the locator hints and page URLs given, not by guessing new ones.
 - Every case's "expected" must describe one concrete, observable outcome — not "it should work correctly."
-- When the plan is complete, call ${SUBMIT_TOOL} exactly once with the full plan.`;
+- When the plan is complete, call ${SUBMIT_TOOL} exactly once with the full plan.
+
+CRITICAL: your plan leaves this conversation ONLY through a ${SUBMIT_TOOL} tool call. Never answer with a plain-text or markdown plan instead of calling the tool — a text-only reply is treated as a failure and discarded, no matter how complete it looks. If you believe you are done, your very next action must be a ${SUBMIT_TOOL} tool call, not a message.`;
 
 export interface PlannerOptions {
   provider: LlmProvider;

@@ -38,7 +38,9 @@ Framework conventions you MUST follow (study the existing code with list_files/r
 
 Critical rule: if a page object, fixture, or spec file already exists that covers what you need, REUSE it — extend it with a new method or a new test inside its existing describe block rather than creating a near-duplicate file or class. Check with list_files and read_file before creating anything new.
 
-When every case in the plan has corresponding, real, written test code, call ${SUBMIT_TOOL} exactly once summarising what you wrote and why.`;
+When every case in the plan has corresponding, real, written test code, call ${SUBMIT_TOOL} exactly once summarising what you wrote and why.
+
+CRITICAL: your summary leaves this conversation ONLY through a ${SUBMIT_TOOL} tool call. Never answer with a plain-text or markdown summary instead of calling the tool — a text-only reply is treated as a failure and discarded, no matter how complete it looks. If you believe you are done, your very next action must be a ${SUBMIT_TOOL} tool call, not a message.`;
 
 export interface GeneratorOptions {
   provider: LlmProvider;

@@ -53,7 +53,7 @@ const configSchema = z.object({
   GEMINI_API_KEY: optionalString,
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   GROQ_API_KEY: optionalString,
-  GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+  GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
 
   MAX_HEAL_ATTEMPTS: integerish(3),
   MAX_REVIEW_ROUNDS: integerish(2),

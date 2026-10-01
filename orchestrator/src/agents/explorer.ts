@@ -26,9 +26,12 @@ Your job: use the browser tools to actually navigate and interact with the targe
 Rules:
 - Start with "navigate" to the target URL, then explore toward the named feature using the links, buttons and forms you see in each snapshot.
 - Prefer role- and label-based locator hints (e.g. getByRole('button', { name: 'Submit' })) over CSS or XPath; only fall back to a CSS/test-id hint when no accessible role or name exists.
-- Record every page you actually visited, every element genuinely relevant to the feature (inputs, buttons, links, result/error messages), and the flow(s) you walked, in the order you walked them.
-- Explore both the success path and at least one way the flow can go wrong (a validation error, an empty field) if you can reach one without destructive or irreversible actions.
-- When you are confident you have covered the feature, call ${SUBMIT_TOOL} exactly once with your complete findings. Do not call it before exploring — an exploration with zero elements or flows is not useful to anyone downstream.`;
+- STAY SCOPED TO THE NAMED FEATURE. A page you only passed through to reach the feature (e.g. a login or registration form used purely to get authenticated) is not itself part of the exploration — do not catalog its fields. Record only pages, elements, and flows that are actually part of the named feature. A small, focused exploration (roughly 5-15 elements) is far more useful downstream than an exhaustive one, and is also far more likely to fit in one response.
+- Explore both the success path and at least one way the flow can go wrong (a validation error, an empty field) if you can reach one without destructive or irreversible actions — but only within the named feature's own scope, not the whole app.
+- Keep "notes" to 1-3 short sentences — the single most important thing the Planner needs to know, not a narrative.
+- When you are confident you have covered the feature, call ${SUBMIT_TOOL} exactly once with your complete findings. Do not call it before exploring — an exploration with zero elements or flows is not useful to anyone downstream.
+
+CRITICAL: your findings leave this conversation ONLY through a ${SUBMIT_TOOL} tool call. Never answer with a plain-text summary, markdown report, or table instead of calling the tool — a text-only reply is treated as a failure and discarded, no matter how complete it looks. If you believe you are done, your very next action must be a ${SUBMIT_TOOL} tool call, not a message.`;
 
 export interface ExplorerOptions {
   provider: LlmProvider;

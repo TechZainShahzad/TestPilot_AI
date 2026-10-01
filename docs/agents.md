@@ -4,12 +4,19 @@
 > Generate → Execute ⇄ Heal → Review → Report, with Review → Generate on
 > rejection. See [`orchestrator/src/agents/`](../orchestrator/src/agents/) and
 > [`core/`](../orchestrator/src/core/) (`executor.ts`, `static-check.ts`,
-> `git.ts`, `github.ts`) for the actual system prompts and logic. Live LLM
-> calls are unverified pending a Gemini or Groq API key; every deterministic
-> and tool-enforced mechanism (file-tool path scoping, the assertion-weakening
-> guard, the lint/type-check gate, git branch/commit/push, the GitHub PR
-> request) was verified against real code, a disposable scratch repo, and a
-> local HTTP test double respectively — never the real `TestPilot_AI` repo.
+> `git.ts`, `github.ts`) for the actual system prompts and logic. Every
+> deterministic and tool-enforced mechanism (file-tool path scoping, the
+> assertion-weakening guard, the lint/type-check gate, git branch/commit/push,
+> the GitHub PR request) was verified against real code, a disposable scratch
+> repo, and a local HTTP test double respectively — never the real
+> `TestPilot_AI` repo. **Explore and Plan have additionally been run live
+> against Groq** (`openai/gpt-oss-120b`, free tier) — real tool-calling turns,
+> real page data, a genuinely well-formed plan — see "Groq's free tier,
+> confirmed live" below for what that run found and fixed. Generate onward
+> is implemented and unit-verified the same way as the rest of the pipeline,
+> but not yet exercised end-to-end live: the free tier's 200,000-token daily
+> cap was exhausted by the Explore/Plan debugging session before Generate
+> could complete a full live pass.
 
 ## Pipeline
 
@@ -118,14 +125,53 @@ per agent step and totalled in the run summary.
 The agents talk to a narrow interface — a chat call, tool declarations, and
 token accounting — with two implementations behind it:
 
-| Provider             | Default model             | Why                                                                                                              |
-| -------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Gemini** (default) | `gemini-2.5-flash`        | Free tier, native function calling, and a context window large enough to pass real framework source as grounding |
-| **Groq** (alternate) | `llama-3.3-70b-versatile` | Free tier, very fast; a useful check that nothing in the pipeline has quietly coupled to one vendor              |
+| Provider             | Default model         | Why                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gemini** (default) | `gemini-2.5-flash`    | Free tier, native function calling, and a context window large enough to pass real framework source as grounding                                                                                                                                                                                                                                                                                                    |
+| **Groq** (alternate) | `openai/gpt-oss-120b` | Free tier, very fast; confirmed live to call tools correctly via Groq's OpenAI-compatible API. (Groq decommissioned the `llama-3.3-70b-versatile` model this was originally built against — model availability on free-tier providers moves faster than most dependencies, worth knowing if `GROQ_MODEL`'s default ever 404s again.) A useful check that nothing in the pipeline has quietly coupled to one vendor. |
 
 The abstraction is not speculative generality: it is what keeps the project
 runnable by anyone who clones it, since both tiers are free, and switching is
 `LLM_PROVIDER=groq`.
+
+### Groq's free tier, confirmed live
+
+Running this pipeline live against Groq's free tier (no paid plan) surfaced
+three real constraints, in the order they were hit:
+
+1. **8,000 tokens/minute, shared across every model on the account** — not
+   per-model. A stateless chat API resending full conversation history (see
+   `GroqProvider`'s class-level docs) blew through this in four ordinary
+   tool-calling turns before anything was fixed.
+2. **A single request can still be throttled** even once #1 is handled,
+   simply because the free tier's per-minute budget is tight enough that
+   normal, correctly-sized traffic gets rate-limited sometimes. Groq's own
+   error message states exactly how long to wait
+   (`"Please try again in 1.7s"`), so `GroqProvider` retries using that
+   value rather than guessing.
+3. **200,000 tokens/day, account-wide.** Iterative live testing while
+   building this feature exhausted it in one afternoon. This is a hard
+   stop, not a bug — there is nothing in-process to retry around; the fix
+   is time (it resets on a rolling window) or Groq's paid Dev Tier.
+
+`GroqProvider` now: collapses every tool result's content to a short
+placeholder once a newer one supersedes it (constraint #1); retries
+`RateLimitError` using Groq's own reported wait time, up to 4 attempts
+(#2); and sets an explicit `max_completion_tokens` (4096) rather than
+Groq's own default, because an unbounded completion was observed getting
+silently truncated mid-JSON when the remaining per-minute budget ran low —
+producing a tool call whose arguments failed to parse, rather than a clean
+error. Every agent's system prompt also states explicitly that it must end
+by calling its submit tool, never by answering in prose — `gpt-oss-120b`
+did exactly that once, mid-debugging, producing a complete and genuinely
+good markdown report instead of a `submit_exploration` call, which the
+agent loop correctly rejected (see "CRITICAL" in each agent's prompt).
+
+None of this is specific to Groq in principle — a stateless, free-tier,
+rate-limited API is a realistic target for anyone running this project
+without a paid plan, and Gemini's `Chat` object sidesteps constraint #1
+only because it manages history server-side, not because the free tier is
+unlimited.
 
 ## Relationship to Playwright's built-in test agents
 

@@ -28,7 +28,9 @@ You are given the results of a failed test run. For each FAILED test, investigat
 
 Absolute rule: you may NEVER make a test pass by removing, weakening, or disabling an assertion (deleting an expect(...) call, loosening its matcher, or skipping the test). This is enforced — write_file will reject an edit that reduces a file's assertion count — but do not attempt it in the first place; if a fix would require weakening an assertion, it is not a fix, the test is correctly failing, and the right verdict is "suspected_app_bug" or "could_not_diagnose".
 
-When you have a verdict for every failed test, call ${SUBMIT_TOOL} exactly once.`;
+When you have a verdict for every failed test, call ${SUBMIT_TOOL} exactly once.
+
+CRITICAL: your verdicts leave this conversation ONLY through a ${SUBMIT_TOOL} tool call. Never answer with a plain-text or markdown summary instead of calling the tool — a text-only reply is treated as a failure and discarded, no matter how complete it looks. If you believe you are done, your very next action must be a ${SUBMIT_TOOL} tool call, not a message.`;
 
 export interface HealerOptions {
   provider: LlmProvider;
