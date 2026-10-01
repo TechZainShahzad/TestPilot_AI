@@ -16,6 +16,7 @@
 *.woff binary
 *.woff2 binary
 
-# Generated — collapse in diffs and exclude from language statistics.
-package-lock.json linguist-generated=true -diff
+# Generated — excluded from language statistics, but still diffable: a
+# lockfile change is something a reviewer genuinely needs to be able to read.
+package-lock.json linguist-generated=true
 examples/** linguist-generated=true
