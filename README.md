@@ -25,8 +25,8 @@ A human merges. Nothing is ever pushed straight to `main`.
 | Phase | Scope                                               | Status     |
 | ----- | --------------------------------------------------- | ---------- |
 | 1     | Repo scaffold, tooling, CI skeleton                 | ✅ Done    |
-| 2     | Framework core (pages, fixtures, API, data) + smoke | 🚧 Next    |
-| 3     | Full regression coverage + Allure on Pages          | ⬜ Planned |
+| 2     | Framework core (pages, fixtures, API, data) + smoke | ✅ Done    |
+| 3     | Full regression coverage + Allure on Pages          | 🚧 Next    |
 | 4     | Orchestrator: provider layer, Explorer, Planner     | ⬜ Planned |
 | 5     | Orchestrator: Generator, Executor, Healer           | ⬜ Planned |
 | 6     | Orchestrator: Reviewer, Reporter, PR creation       | ⬜ Planned |

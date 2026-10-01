@@ -88,16 +88,64 @@ it should surface.
 
 ### Test data
 
-_Pending — phase 2._ Fresh Faker-generated customer per run; builders in
-`src/data/`; `USE_FIXED_USER` escape hatch for fast local loops.
+Faker-backed builders in `src/data/` — `buildNewCustomer()`,
+`buildPayee()` — generate every field a form needs, with per-call overrides
+for the specific fields a negative test cares about. `register.htm`'s own
+validation turned out to check presence only, not format, so the builders
+don't manufacture field-format edge cases that don't exist; what they do
+guarantee is a unique, length-safe username (see "Known application
+limitations" below). `USE_FIXED_USER` in `.env` is an escape hatch for fast
+local loops against a pinned account, at the cost of the balance-consistency
+specs becoming flaky if someone else uses the same account.
 
 ## Page objects
 
-_Pending — phase 2._
+One class per screen, extending `BasePage`. `BasePage.goto()` is where the
+one non-obvious shared behaviour lives: every account-bearing screen
+(overview, transfer, open account, bill pay, find transactions, request
+loan) server-renders its shell, then populates its account table or
+`<select>` via a `$(document).ready` AJAX call to
+`services_proxy/bank/customers/.../accounts`. `page.goto()` only waits for
+`load`, which fires before that call resolves — confirmed live, where the
+overview page's account table read back empty immediately after navigation.
+`BasePage.goto()` waits for `networkidle` once, centrally, rather than
+leaving every subclass to rediscover the same race. This is a real
+completion condition, not the `waitForTimeout` hard-wait the lint config
+bans.
+
+Locators were taken from the live DOM (`innerHTML`, not just rendered text),
+not guessed — several of ParaBank's own error-message ids turned out to be
+unintuitive (`#validationModel-name` for Bill Pay, `customer.username.errors`
+for Register) and would have been wrong on the first try otherwise.
 
 ## API client
 
-_Pending — phase 2._
+[`ParaBankApiClient`](../framework/src/api/parabank-client.ts) wraps an
+`APIRequestContext` rather than owning one — see "Authentication" above for
+why — and builds every URL as a full absolute string rather than relying on
+Playwright's `baseURL` + relative-path resolution, which silently drops
+`/parabank` when the path starts with `/` (WHATWG URL rules: a base URL
+without a trailing slash treats its last segment as a file, not a
+directory). `register.htm` and `login.htm` also both 500 on a cold POST —
+confirmed live — because the Struts-era backend expects a session to already
+exist; `ensureSession()` does a cheap GET first to establish one, the same
+way a browser landing on the page naturally would.
+
+## Known application limitations
+
+Found by driving the live app and reading its own client-side JS, not
+assumed. Each one shapes a specific regression spec, noted alongside it.
+
+| #   | Limitation                                                                                                                                                                                          | Evidence                                                                                                     | How the suite handles it                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **`customer.username` silently rejects anything over 20 characters** — misreported as `"This username already exists."`, not a length error.                                                        | Bisected live: 20 chars succeeds, 21 fails, every time, with brand-new names.                                | [`customer-builder.ts`](../framework/src/data/customer-builder.ts) caps generated usernames at 18 characters.                                                                                                                                             |
+| 2   | **Transfer Funds performs no server-side amount validation.** Negative, zero, and balance-exceeding amounts all return `200` with a success message. Only a non-numeric amount is rejected (`400`). | `transfer.htm`'s own `submit()` builds the AJAX URL straight from `$('#amount').val()` with no check at all. | The negative/zero/insufficient-funds specs assert the _correct business behaviour_ via `test.fail()`, with a comment citing this limitation — so the suite documents the gap instead of either hiding it or asserting a rejection the app cannot produce. |
+| 3   | **Request Loan approves unconditionally.** Verified by requesting a six-figure loan with zero down payment from a freshly opened, zero-balance account — still `approved: true`.                    | Direct API probing, three different ways, same result.                                                       | The "denied" spec uses `test.fail()` for the same reason as #2; the "approved" spec is a genuine passing test.                                                                                                                                            |
+| 4   | **No account lockout after repeated failed logins.**                                                                                                                                                | No lockout feature exists anywhere in the app to probe.                                                      | The brief's "locked" login scenario is interpreted as "empty fields," which the app does validate; the absence of lockout is recorded here rather than asserted as a failing test with nothing concrete to point at.                                      |
+
+These are exactly the shape of finding the orchestrator's **Healer** agent is
+designed to surface rather than hide (see [`docs/agents.md`](agents.md)) —
+#2 and #3 are real, live instances of "a failure that is not a test bug."
 
 ## Reporting
 
