@@ -1,8 +1,8 @@
 # Framework architecture
 
-> **Phase 1 scaffold.** This document grows with the code. Sections marked
-> _pending_ are filled in as the phase that builds them lands, so that nothing
-> here describes code that does not exist yet.
+> **Status.** The framework (phases 1–3) is complete — page objects, API
+> client, data builders, fixtures, and full regression coverage. This
+> document describes what is actually built, not a plan.
 
 ## Scope
 

@@ -10,7 +10,11 @@
  * validation and the preflight check, so the contract the rest of the
  * orchestrator is written against is fixed before the agents exist.
  */
+import { runExplorer } from './agents/explorer.js';
+import { runPlanner } from './agents/planner.js';
 import { PROVIDERS, apiKeyEnvVar, activeApiKey, config, type ProviderName } from './core/config.js';
+import { RunContext } from './core/run.js';
+import { createProvider } from './providers/index.js';
 import { LOG_LEVELS, banner, createLogger, setLogLevel, type LogLevel } from './util/logger.js';
 
 const log = createLogger('cli');
@@ -214,12 +218,37 @@ async function main(): Promise<void> {
   );
   log.info(`Mode:     ${dryRun ? 'dry run — no pull request' : 'full run — opens a pull request'}`);
 
-  log.warn(
-    'The agent pipeline is not wired up yet (arrives in phases 4–6). ' +
-      'Preflight passed, so configuration and credentials are good.'
+  const run = new RunContext(options.feature, options.url, options.provider);
+  log.info(`Run folder: ${run.dir}`);
+
+  const provider = createProvider(options.provider);
+
+  banner('Explore');
+  const exploration = await runExplorer({
+    provider,
+    run,
+    targetUrl: options.url,
+    feature: options.feature,
+  });
+  log.info(
+    `Explorer found ${String(exploration.pages.length)} page(s), ` +
+      `${String(exploration.elements.length)} element(s), ${String(exploration.flows.length)} flow(s).`
   );
 
-  await Promise.resolve();
+  banner('Plan');
+  const plan = await runPlanner({ provider, run, feature: options.feature, exploration });
+  log.info(`Planner produced ${String(plan.cases.length)} test case(s).`);
+
+  const { usage, estimatedUsd } = run.totals();
+  log.info(
+    `Tokens used: ${String(usage.totalTokens)} (prompt ${String(usage.promptTokens)}, ` +
+      `completion ${String(usage.completionTokens)}) ≈ $${estimatedUsd.toFixed(4)}`
+  );
+
+  log.warn(
+    'Generate / Execute / Heal / Review / Report are not wired up yet (phases 5–6). ' +
+      `Exploration and plan are saved in ${run.dir}.`
+  );
 }
 
 main().catch((error: unknown) => {

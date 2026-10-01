@@ -1,10 +1,10 @@
 # Agents
 
-> **Phase 1 scaffold.** The pipeline is built in phases 4–6. This document
-> records the contracts the agents are being written against — role,
-> inputs/outputs, and guardrails — so the design is reviewable before the
-> implementation exists. Prompts and worked examples are added as each agent
-> lands.
+> **Status.** Explorer and Planner (phase 4) are implemented — see
+> [`orchestrator/src/agents/explorer.ts`](../orchestrator/src/agents/explorer.ts)
+> and [`planner.ts`](../orchestrator/src/agents/planner.ts) for their actual
+> system prompts. Generator, Executor, Healer, Reviewer, and Reporter
+> (phases 5–6) are specified below as contracts but not yet built.
 
 ## Pipeline
 
@@ -88,14 +88,65 @@ runnable by anyone who clones it, since both tiers are free, and switching is
 
 ## Relationship to Playwright's built-in test agents
 
-_Pending — phase 4._ Playwright ships planner / generator / healer agent
-definitions for use inside coding assistants. Before implementing, the
-installed version's capabilities get checked, and this section will state
-plainly where TestPilot overlaps them, where it builds on them, and where it
-does something they do not: specifically the end-to-end unattended pipeline,
-the typed run artifacts, the explicit test-bug/app-bug classification, and the
-review gate before a pull request. Duplicating them for its own sake would be
-the wrong outcome.
+Playwright `1.63` (the version this repo pins) does ship built-in agents —
+`npx playwright init-agents` installs `playwright-test-planner`,
+`playwright-test-generator`, and `playwright-test-healer` as `.agent.md`
+subagent definitions (read directly from
+`node_modules/playwright/lib/agents/` while building this phase, not assumed).
+They are genuinely useful, and this orchestrator is not a reimplementation of
+them — it solves a different problem.
+
+**What they are.** Subagent definitions for an MCP-capable coding assistant
+(Claude Code, by their own frontmatter: `model: sonnet`). Each one is a system
+prompt plus a tool allow-list drawn from the **Playwright MCP server**
+(`playwright-test/browser_*`, `planner_save_plan`, `generator_write_test`,
+`test_debug`, …). You invoke one at a time, inside an IDE chat session, with a
+human present throughout.
+
+**What they do, concretely:**
+
+| Agent                       | Input → Output                                                                                                                 | Mechanism                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `playwright-test-planner`   | Explores via `browser_*` tools, writes **one markdown file** via `planner_save_plan`                                           | Explore and Plan are one step; no structured JSON                                     |
+| `playwright-test-generator` | Replays each plan step as a real `browser_*` action, then `generator_write_test` emits **one spec file** from the recorded log | Essentially guided codegen — it does the actions for real and transcribes them        |
+| `playwright-test-healer`    | `test_run` → `test_debug` the failures → edit → rerun, looped until green or given up on                                       | On persistent failure: `test.fixme()` + a comment, not a reported "suspected app bug" |
+
+**Where this orchestrator is a different tool, not a bigger version of theirs:**
+
+- **Unattended vs. interactive.** `npm run orchestrate -- --feature "Bill Pay"`
+  runs Explore → Plan → Generate → Execute → Heal → Review → Report to
+  completion with no human in the loop until the PR review. Their agents are
+  invoked one at a time by a person in an IDE chat; nothing strings them into
+  a pipeline or opens a PR.
+- **No MCP server or IDE host required.** This orchestrator drives Playwright
+  directly as a library — `chromium.launch()` plus `page.ariaSnapshot({mode:
+'ai'})` for the same ref-annotated accessibility tree their MCP tools
+  expose — callable from a plain `node` CLI in CI. Their agents require the
+  Playwright MCP server running and an MCP-capable host; they cannot run
+  headless in a GitHub Actions job as-is.
+- **Typed, validated artifacts at every stage**, not markdown-then-source.
+  `exploration.json` and `plan.json` are Zod-validated and saved before
+  Generate even starts, which is what makes a run resumable and inspectable
+  from disk — see "Run artifacts" below. Their planner's only output is a
+  markdown file; nothing downstream consumes it programmatically.
+- **An explicit test-bug/app-bug split with a hard attempt cap, and a
+  Reviewer gate before anything reaches a human as a PR** — stages their
+  agents don't have. Their healer's failure mode is `test.fixme()` with a
+  comment; this orchestrator's is a structured, reported suspected-app-bug
+  that does not disable the assertion.
+- **Provider-agnostic** (Gemini or Groq, both free-tier) instead of whatever
+  model the host IDE happens to be configured with.
+
+None of this makes the built-in agents worse at their job — interactive,
+IDE-assisted test authoring with a human steering every step is a reasonable
+thing to want, and interactive healing with `test_debug` has a tighter
+feedback loop than this orchestrator's batch retry-and-report can offer. They
+are built for a different moment in the workflow (an engineer, in an editor,
+writing one test) than this orchestrator is (CI or a terminal, unattended,
+producing a reviewable PR). A future iteration could have the Generator shell
+out to `playwright-test-generator` when an MCP host is available rather than
+re-deriving code generation from scratch — noted here, not built, since nothing
+in this phase needed it yet.
 
 ## Run artifacts
 
