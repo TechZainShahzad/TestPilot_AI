@@ -91,7 +91,7 @@ export class BillPayPage extends BasePage {
     return this.page.locator('#validationModel-amount-invalid');
   }
 
-  async fill(payee: Payee, amount: string): Promise<void> {
+  async fillForm(payee: Payee, amount: string): Promise<void> {
     await this.payeeNameInput.fill(payee.name);
     await this.streetInput.fill(payee.address.street);
     await this.cityInput.fill(payee.address.city);
@@ -107,8 +107,11 @@ export class BillPayPage extends BasePage {
     await this.sendPaymentButton.click();
   }
 
-  async payBill(payee: Payee, amount: string): Promise<void> {
-    await this.fill(payee, amount);
+  async payBill(payee: Payee, amount: string, fromAccountId?: number): Promise<void> {
+    await this.fillForm(payee, amount);
+    if (fromAccountId !== undefined) {
+      await this.fromAccountSelect.selectOption(String(fromAccountId));
+    }
     await this.submit();
     await this.resultPanel.waitFor({ state: 'visible' });
   }

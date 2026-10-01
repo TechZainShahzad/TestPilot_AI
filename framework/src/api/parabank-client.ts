@@ -190,7 +190,17 @@ export class ParaBankApiClient {
     return accountSchema.array().parse(await response.json());
   }
 
-  /** `type: 0` opens CHECKING, `type: 1` opens SAVINGS — ParaBank's own enum. */
+  /**
+   * `type: 0` opens CHECKING, `type: 1` opens SAVINGS — ParaBank's own enum.
+   *
+   * The returned `balance` is `0` and is **stale** — confirmed live:
+   * `fromAccountId` is always debited exactly $100, and the new account is
+   * credited that $100 as a real transaction pair, but this response is
+   * captured before that lands. Call {@link getAccount} afterward for the
+   * true balance. Deliberately not auto-corrected here: this client
+   * reflects what the API actually returns, quirks included — see "Known
+   * application limitations" in docs/architecture.md.
+   */
   async openAccount(
     customerId: number,
     type: AccountType,

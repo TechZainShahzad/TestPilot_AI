@@ -74,7 +74,7 @@ export class RegisterPage extends BasePage {
     return this.page.locator(`#${cssEscape(id)}`);
   }
 
-  async fill(customer: NewCustomer): Promise<void> {
+  async fillForm(customer: NewCustomer): Promise<void> {
     await this.firstNameInput.fill(customer.firstName);
     await this.lastNameInput.fill(customer.lastName);
     await this.streetInput.fill(customer.address.street);
@@ -93,7 +93,7 @@ export class RegisterPage extends BasePage {
   }
 
   async register(customer: NewCustomer): Promise<void> {
-    await this.fill(customer);
+    await this.fillForm(customer);
     await this.submit();
   }
 }

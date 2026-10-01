@@ -26,8 +26,16 @@ export class OverviewPage extends BasePage {
     return this.accountTable.locator('tbody tr').filter({ has: this.page.locator('a') });
   }
 
+  /**
+   * ParaBank assigns sequential numeric ids, so once enough accounts
+   * accumulate in a long-lived shared session, one id can become a literal
+   * substring of another (e.g. `108923` inside `1108923`). `hasText`'s
+   * default string form matches substrings, which silently matched the
+   * wrong row during development. `exact: true` matches the full
+   * accessible name instead.
+   */
   accountLink(accountId: number): Locator {
-    return this.accountTable.locator('a', { hasText: String(accountId) });
+    return this.accountTable.getByRole('link', { name: String(accountId), exact: true });
   }
 
   async accountIds(): Promise<number[]> {
@@ -37,9 +45,7 @@ export class OverviewPage extends BasePage {
 
   /** Parses the rendered `"$1,234.56"` balance cell for one account row. */
   async balanceFor(accountId: number): Promise<number> {
-    const row = this.accountRows.filter({
-      has: this.page.locator('a', { hasText: String(accountId) }),
-    });
+    const row = this.accountRows.filter({ has: this.accountLink(accountId) });
     const text = await row.locator('td').nth(1).innerText();
     return parseCurrency(text);
   }

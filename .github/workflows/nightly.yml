@@ -56,8 +56,13 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: framework
 
+      # --workers=1: ParaBank is a small shared public demo, not a
+      # load-tested target. Four shards already parallelize across jobs;
+      # adding per-shard worker concurrency on top of that compounds into
+      # enough simultaneous traffic to trip Cloudflare's rate limiting
+      # (429s) — confirmed live while developing this suite.
       - name: Run shard
-        run: npx playwright test --shard=${{ matrix.shard }}/${{ env.SHARD_TOTAL }}
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ env.SHARD_TOTAL }} --workers=1
         working-directory: framework
         env:
           BASE_URL: https://parabank.parasoft.com

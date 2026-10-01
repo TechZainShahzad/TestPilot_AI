@@ -7,13 +7,26 @@
  */
 import { z } from 'zod';
 
+/** The two types `services_proxy/bank/createAccount` can open. */
 export const accountTypeSchema = z.enum(['CHECKING', 'SAVINGS']);
 export type AccountType = z.infer<typeof accountTypeSchema>;
+
+/**
+ * Every type a GET on an account can actually return. `LOAN` is not
+ * openable directly — it only ever appears as the account `requestLoan`
+ * creates for an approved loan (confirmed live: `{"type":"LOAN","balance":
+ * 5000}` alongside the funding account, whose balance dropped by the down
+ * payment, not the loan amount). A customer who has taken out a loan has
+ * one of these in their account list, so `getCustomerAccounts` has to be
+ * able to parse it even though `openAccount` can never produce one.
+ */
+export const anyAccountTypeSchema = z.enum(['CHECKING', 'SAVINGS', 'LOAN']);
+export type AnyAccountType = z.infer<typeof anyAccountTypeSchema>;
 
 export const accountSchema = z.object({
   id: z.number(),
   customerId: z.number(),
-  type: accountTypeSchema,
+  type: anyAccountTypeSchema,
   balance: z.number(),
 });
 export type Account = z.infer<typeof accountSchema>;

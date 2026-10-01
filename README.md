@@ -26,8 +26,8 @@ A human merges. Nothing is ever pushed straight to `main`.
 | ----- | --------------------------------------------------- | ---------- |
 | 1     | Repo scaffold, tooling, CI skeleton                 | ✅ Done    |
 | 2     | Framework core (pages, fixtures, API, data) + smoke | ✅ Done    |
-| 3     | Full regression coverage + Allure on Pages          | 🚧 Next    |
-| 4     | Orchestrator: provider layer, Explorer, Planner     | ⬜ Planned |
+| 3     | Full regression coverage + Allure on Pages          | ✅ Done    |
+| 4     | Orchestrator: provider layer, Explorer, Planner     | 🚧 Next    |
 | 5     | Orchestrator: Generator, Executor, Healer           | ⬜ Planned |
 | 6     | Orchestrator: Reviewer, Reporter, PR creation       | ⬜ Planned |
 | 7     | Documentation polish + committed example run        | ⬜ Planned |
@@ -171,6 +171,18 @@ traffic.
 page object from quietly handing back `any` out of a locator chain.
 `no-floating-promises` is an error rather than a warning because a missing
 `await` on a Playwright action does not fail — it silently passes.
+
+**Why the API client doesn't correct what it reads.**
+`createAccount` reports a new account's balance as `0` — but it actually
+debits the funding account exactly $100 and credits it to the new one,
+confirmed by reading both accounts' transaction history immediately
+afterward. The client returns that stale `0` as-is rather than quietly
+fixing it, because the whole point of a typed client here is to reflect what
+the real API does, quirks included; the test-data helpers that need the true
+balance account for it explicitly instead. See "Known application
+limitations" in [`docs/architecture.md`](docs/architecture.md) — found by
+writing real regression tests against the live app, not by reading docs that
+don't exist for this API.
 
 Fuller reasoning lives in [`docs/architecture.md`](docs/architecture.md); each
 agent's prompts, I/O contract and guardrails are in
