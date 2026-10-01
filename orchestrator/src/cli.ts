@@ -5,9 +5,9 @@
  *   npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
  *   npm run orchestrate -- --feature "Product Sorting" --dry-run
  *
- * The pipeline (Explore → Plan → Generate → Execute ⇄ Heal) runs end to end;
- * Review and Report (phase 6) are not wired up yet. This file owns argument
- * parsing, the preflight check, and the stage-by-stage orchestration.
+ * The full pipeline (Explore → Plan → Generate → Execute ⇄ Heal → Review ⇄
+ * Generate → Report) runs end to end. This file owns argument parsing, the
+ * preflight check, and the stage-by-stage orchestration.
  */
 import { runExplorer } from './agents/explorer.js';
 import { runGenerator } from './agents/generator.js';
@@ -42,6 +42,8 @@ export interface CliOptions {
   logLevel: LogLevel;
   /** Override the per-run heal ceiling from `.env`. */
   maxHealAttempts: number;
+  /** Run the Explorer's browser visibly instead of headless. */
+  headed: boolean;
 }
 
 const USAGE = `
@@ -62,11 +64,13 @@ Options:
       --max-heal <n>        Max heal attempts before giving up
                             (default: ${String(config.limits.maxHealAttempts)})
   -l, --log-level <level>   ${LOG_LEVELS.join(' | ')} (default: info)
+  -H, --headed              Show the Explorer's browser instead of running headless
   -h, --help                Show this message
 
 Examples:
   npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
   npm run orchestrate -- --feature "Product Sorting" --dry-run --log-level debug
+  npm run orchestrate -- --feature "Burger Menu" --dry-run --headed
 `;
 
 class UsageError extends Error {}
@@ -79,6 +83,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
   let provider: ProviderName = config.provider;
   let logLevel: LogLevel = 'info';
   let maxHealAttempts = config.limits.maxHealAttempts;
+  let headed = false;
 
   /** Read the value that follows a flag, failing loudly when it is missing. */
   const valueFor = (flag: string, index: number): string => {
@@ -111,6 +116,10 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case '--dry-run':
         dryRun = true;
+        break;
+      case '-H':
+      case '--headed':
+        headed = true;
         break;
       case '-p':
       case '--provider': {
@@ -169,6 +178,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     provider,
     logLevel,
     maxHealAttempts,
+    headed,
   };
 }
 
@@ -216,6 +226,7 @@ async function main(): Promise<void> {
     provider: options.provider,
     model: options.provider === 'gemini' ? config.gemini.model : config.groq.model,
     dryRun: options.dryRun,
+    headed: options.headed,
     limits: { ...config.limits, maxHealAttempts: options.maxHealAttempts },
   });
 
@@ -239,6 +250,7 @@ async function main(): Promise<void> {
     run,
     targetUrl: options.url,
     feature: options.feature,
+    headless: !options.headed,
   });
   log.info(
     `Explorer found ${String(exploration.pages.length)} page(s), ` +
