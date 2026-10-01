@@ -50,7 +50,12 @@ test.describe('transactions API @regression @api', () => {
 
   test('getTransactionById returns undefined for an ID that does not exist', async ({
     apiClient,
+    registeredUser: _registeredUser,
   }) => {
+    // `registeredUser` isn't used directly, but depending on it is what
+    // authenticates this request — services_proxy returns 401 (not 404) to
+    // an anonymous caller, which this test would otherwise be asserting
+    // against by accident.
     const found = await apiClient.getTransactionById(999_999_999);
     expect(found).toBeUndefined();
   });

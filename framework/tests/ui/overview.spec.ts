@@ -1,19 +1,28 @@
 import { expect, test } from '@fixtures/pages.js';
-import { defined } from '@utils/assert.js';
 
+/**
+ * Deliberately does not assert "exactly 1 account" or a fixed $100,000
+ * balance: every `ui` spec in a run shares one session (see
+ * docs/architecture.md), and several regression specs open accounts or
+ * transfer money on this same customer. Asserting a snapshot that only
+ * holds immediately after registration made this smoke test fail the
+ * moment it ran alongside the rest of the suite rather than alone. What it
+ * checks instead — the UI shows the known CHECKING account with whatever
+ * balance the API currently reports for it — is both fast and true
+ * regardless of what else has run.
+ */
 test.describe('account overview @smoke @ui', () => {
-  test('a freshly registered customer sees one CHECKING account with a $100,000 balance', async ({
+  test('the overview shows the registered CHECKING account with its current balance', async ({
+    testUser,
     overviewPage,
+    sessionApi,
   }) => {
     await overviewPage.goto();
 
-    const ids = await overviewPage.accountIds();
-    expect(ids).toHaveLength(1);
-    const accountId = defined(ids[0], 'account list unexpectedly empty');
+    await expect(overviewPage.accountLink(testUser.checkingAccountId)).toBeVisible();
 
-    await expect(overviewPage.accountLink(accountId)).toBeVisible();
-
-    const balance = await overviewPage.balanceFor(accountId);
-    expect(balance).toBe(100_000);
+    const apiBalance = (await sessionApi.getAccount(testUser.checkingAccountId)).balance;
+    const uiBalance = await overviewPage.balanceFor(testUser.checkingAccountId);
+    expect(uiBalance).toBe(apiBalance);
   });
 });

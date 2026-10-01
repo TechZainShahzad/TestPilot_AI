@@ -43,10 +43,24 @@ export class OverviewPage extends BasePage {
     return texts.map((text) => Number(text.trim()));
   }
 
+  /**
+   * The `<tr>` for one account, found by walking up from its (already
+   * exact-matched) link rather than re-querying the table with
+   * `accountRows.filter({ has: accountLink(id) })`. That composition —
+   * filtering table rows by a `has` locator that is itself scoped to
+   * `#accountTable` — reproduced as a consistent 15s timeout on CI: the
+   * row never resolved, even though the link itself resolved fine on its
+   * own. Walking up via `ancestor::tr[1]` sidesteps the nested-scope
+   * entirely instead of relying on exactly how `.filter({ has })` composes
+   * two independently-rooted locators.
+   */
+  private accountRow(accountId: number): Locator {
+    return this.accountLink(accountId).locator('xpath=ancestor::tr[1]');
+  }
+
   /** Parses the rendered `"$1,234.56"` balance cell for one account row. */
   async balanceFor(accountId: number): Promise<number> {
-    const row = this.accountRows.filter({ has: this.accountLink(accountId) });
-    const text = await row.locator('td').nth(1).innerText();
+    const text = await this.accountRow(accountId).locator('td').nth(1).innerText();
     return parseCurrency(text);
   }
 
