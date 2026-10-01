@@ -1,0 +1,81 @@
+name: Publish Allure report
+
+# Reusable workflow: takes the merged Allure results from a completed run and
+# publishes them to GitHub Pages, so the README can link to a live report.
+#
+# History is preserved across runs — Allure's trend graphs are the main reason
+# to publish rather than just download an artifact, and they need the previous
+# report's `history/` folder to be carried forward.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & deploy report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download merged Allure results
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: allure-results-merged
+          path: framework/allure-results
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+
+      - name: Restore Allure history
+        # The currently published report is the only source of trend history.
+        # Absent on the very first deploy, which is expected and harmless.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          url="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/history"
+          mkdir -p framework/allure-results/history
+          for file in history.json duration-trend.json retry-trend.json categories-trend.json; do
+            curl -fsSL "$url/$file" -o "framework/allure-results/history/$file" || true
+          done
+
+      - name: Generate Allure report
+        run: |
+          set -euo pipefail
+          if [ -z "$(ls -A framework/allure-results 2>/dev/null)" ]; then
+            echo "::warning::No Allure results found — publishing a placeholder."
+            mkdir -p framework/allure-report
+            printf '%s' '<!doctype html><title>TestPilot_AI</title><h1>No report yet</h1><p>The nightly regression run has not produced Allure results.</p>' \
+              > framework/allure-report/index.html
+          else
+            npm run allure:generate
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: framework/allure-report
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

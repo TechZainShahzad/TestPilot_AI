@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "types": ["node"],
+    // Playwright executes the TS directly via its own transform; `tsc` here is
+    // a type-checker only, so nothing needs to be emitted.
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    // No `baseUrl` — deprecated in TS 6, removed in 7. Path patterns are
+    // resolved relative to this file instead.
+    "paths": {
+      "@pages/*": ["./src/pages/*"],
+      "@api/*": ["./src/api/*"],
+      "@fixtures/*": ["./src/fixtures/*"],
+      "@data/*": ["./src/data/*"],
+      "@utils/*": ["./src/utils/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules", "dist", "playwright-report", "test-results"]
+}

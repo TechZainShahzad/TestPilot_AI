@@ -1,0 +1,153 @@
+name: Nightly regression
+
+# The full suite, sharded across parallel jobs, then merged into a single
+# Allure report that is published to GitHub Pages.
+on:
+  schedule:
+    # 02:30 UTC — outside the window when the shared demo app is busiest.
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: Number of parallel shards
+        required: false
+        default: '4'
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  FORCE_COLOR: '1'
+  SHARD_TOTAL: 4
+
+jobs:
+  regression:
+    name: Regression (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # One flaky shard should not hide the results of the other three.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: framework
+
+      - name: Run shard
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ env.SHARD_TOTAL }}
+        working-directory: framework
+        env:
+          BASE_URL: https://parabank.parasoft.com
+
+      # Blob reports are the shard-safe format; they merge into one HTML
+      # report. Allure results merge by simply being concatenated.
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: framework/blob-report/
+          retention-days: 7
+
+      - name: Upload Allure results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.shard }}
+          path: framework/allure-results/
+          retention-days: 7
+
+      - name: Upload traces & videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.shard }}
+          path: framework/test-results/
+          retention-days: 14
+
+  merge-reports:
+    name: Merge reports
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # `always()` so a failing shard still produces a report — a red report is
+    # the most useful artifact there is.
+    if: ${{ always() }}
+    needs: [regression]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v5
+        with:
+          path: framework/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into HTML report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        working-directory: framework
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report
+
+      - name: Download Allure results
+        uses: actions/download-artifact@v5
+        with:
+          path: framework/allure-results
+          pattern: allure-results-*
+          merge-multiple: true
+
+      - name: Upload merged HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: framework/playwright-report/
+          retention-days: 30
+
+      - name: Upload merged Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-merged
+          path: framework/allure-results/
+          retention-days: 30
+
+  publish:
+    name: Publish Allure report
+    # Keeps the Pages deployment logic in one place rather than duplicated.
+    needs: [merge-reports]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    uses: ./.github/workflows/pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
+blob-report/
+allure-results/
+allure-report/
+orchestrator/runs/
+examples/
+package-lock.json
+CHANGELOG.md
+
+# The original project brief — an input document, not source we maintain.
+claude-code-prompt.md

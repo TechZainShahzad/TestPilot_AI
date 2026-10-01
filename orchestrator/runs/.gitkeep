@@ -1,0 +1,2 @@
+# Run artifacts are written here as `runs/<timestamp>/`.
+# Real runs stay local (git-ignored); a committed sample lives in /examples.
