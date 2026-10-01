@@ -17,6 +17,7 @@ import {
   generationResultSchema,
   type ExplorationResult,
   type GenerationResult,
+  type ReviewResult,
   type TestPlan,
 } from './types.js';
 
@@ -44,11 +45,13 @@ export interface GeneratorOptions {
   run: RunContext;
   plan: TestPlan;
   exploration: ExplorationResult;
+  /** A prior round's rejection, when this call is a re-generation. */
+  reviewFeedback?: ReviewResult;
   maxSteps?: number;
 }
 
 export async function runGenerator(options: GeneratorOptions): Promise<GenerationResult> {
-  const { provider, run, plan, exploration, maxSteps = 40 } = options;
+  const { provider, run, plan, exploration, reviewFeedback, maxSteps = 40 } = options;
 
   const writtenPaths = new Set<string>();
   const fileTools = createFileTools(writtenPaths);
@@ -68,6 +71,18 @@ export async function runGenerator(options: GeneratorOptions): Promise<Generatio
     '',
     `Explorer findings (JSON):`,
     JSON.stringify(exploration, null, 2),
+    ...(reviewFeedback
+      ? [
+          '',
+          'The previous round was REJECTED by review. Fix every blocking finding below before ' +
+            'resubmitting — do not repeat the same mistakes:',
+          JSON.stringify(
+            reviewFeedback.findings.filter((f) => f.severity === 'blocking'),
+            null,
+            2
+          ),
+        ]
+      : []),
     '',
     'Study the existing framework code relevant to this feature first, then write the test code, then call the submit tool.',
   ].join('\n');

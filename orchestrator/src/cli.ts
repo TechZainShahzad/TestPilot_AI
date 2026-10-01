@@ -13,6 +13,14 @@ import { runExplorer } from './agents/explorer.js';
 import { runGenerator } from './agents/generator.js';
 import { runHealer } from './agents/healer.js';
 import { runPlanner } from './agents/planner.js';
+import { runReporter } from './agents/reporter.js';
+import { runReviewer } from './agents/reviewer.js';
+import type {
+  ExecutionResult,
+  GenerationResult,
+  HealingResult,
+  ReviewResult,
+} from './agents/types.js';
 import { PROVIDERS, apiKeyEnvVar, activeApiKey, config, type ProviderName } from './core/config.js';
 import { runExecutor } from './core/executor.js';
 import { RunContext } from './core/run.js';
@@ -241,56 +249,110 @@ async function main(): Promise<void> {
   const plan = await runPlanner({ provider, run, feature: options.feature, exploration });
   log.info(`Planner produced ${String(plan.cases.length)} test case(s).`);
 
-  banner('Generate');
-  const generation = await runGenerator({ provider, run, plan, exploration });
-  const specFiles = generation.filesWritten
-    .map((f) => f.path)
-    .filter((path) => path.endsWith('.spec.ts'));
-  log.info(
-    `Generator wrote ${String(generation.filesWritten.length)} file(s), ${String(specFiles.length)} of them spec files.`
-  );
-  if (specFiles.length === 0) {
-    throw new Error('Generator produced no spec files — nothing to execute.');
-  }
+  const generations: GenerationResult[] = [];
+  const executions: ExecutionResult[] = [];
+  const healings: HealingResult[] = [];
+  const reviews: ReviewResult[] = [];
+  let healAttempt = 0;
 
-  banner('Execute');
-  let attempt = 1;
-  let execution = await runExecutor({ run, specFiles, attempt });
-  log.info(
-    `Attempt ${String(attempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
-  );
-
-  while (execution.failed > 0 && attempt <= options.maxHealAttempts) {
-    banner(`Heal (attempt ${String(attempt)})`);
-    const healing = await runHealer({ provider, run, execution, attempt });
-    for (const verdict of healing.verdicts) {
-      log.info(`  ${verdict.verdict}: ${verdict.test}`);
+  let round = 1;
+  for (;;) {
+    banner(`Generate (round ${String(round)})`);
+    const lastReview = reviews.at(-1);
+    const generation = await runGenerator({
+      provider,
+      run,
+      plan,
+      exploration,
+      ...(lastReview !== undefined && { reviewFeedback: lastReview }),
+    });
+    generations.push(generation);
+    const specFiles = generation.filesWritten
+      .map((f) => f.path)
+      .filter((path) => path.endsWith('.spec.ts'));
+    log.info(
+      `Generator wrote ${String(generation.filesWritten.length)} file(s), ${String(specFiles.length)} of them spec files.`
+    );
+    if (specFiles.length === 0) {
+      throw new Error('Generator produced no spec files — nothing to execute.');
     }
 
-    attempt += 1;
-    banner(`Execute (attempt ${String(attempt)})`);
-    execution = await runExecutor({ run, specFiles, attempt });
+    banner('Execute');
+    healAttempt += 1;
+    let execution = await runExecutor({ run, specFiles, attempt: healAttempt });
+    executions.push(execution);
     log.info(
-      `Attempt ${String(attempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
+      `Attempt ${String(healAttempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
     );
+
+    while (execution.failed > 0 && healAttempt <= options.maxHealAttempts) {
+      banner(`Heal (attempt ${String(healAttempt)})`);
+      const healing = await runHealer({ provider, run, execution, attempt: healAttempt });
+      healings.push(healing);
+      for (const verdict of healing.verdicts) {
+        log.info(`  ${verdict.verdict}: ${verdict.test}`);
+      }
+
+      healAttempt += 1;
+      banner(`Execute (attempt ${String(healAttempt)})`);
+      execution = await runExecutor({ run, specFiles, attempt: healAttempt });
+      executions.push(execution);
+      log.info(
+        `Attempt ${String(healAttempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
+      );
+    }
+
+    if (execution.failed > 0) {
+      log.warn(
+        `${String(execution.failed)} test(s) still failing after ${String(options.maxHealAttempts)} heal attempt(s) — ` +
+          'see the last healing-*.json for suspected-app-bug / could-not-diagnose verdicts.'
+      );
+    }
+
+    banner(`Review (round ${String(round)})`);
+    const review = await runReviewer({ provider, run, generation, round });
+    reviews.push(review);
+    log.info(
+      `Verdict: ${review.verdict} (lint ${review.lintPassed ? 'OK' : 'FAILED'}, typecheck ${review.typecheckPassed ? 'OK' : 'FAILED'}, ${String(review.findings.length)} finding(s))`
+    );
+
+    if (review.verdict === 'approved') break;
+    if (round >= config.limits.maxReviewRounds) {
+      log.warn(`Review rejected after ${String(round)} round(s) — giving up at MAX_REVIEW_ROUNDS.`);
+      break;
+    }
+    round += 1;
   }
 
-  if (execution.failed > 0) {
-    log.warn(
-      `${String(execution.failed)} test(s) still failing after ${String(options.maxHealAttempts)} heal attempt(s) — ` +
-        'see the last healing-*.json for suspected-app-bug / could-not-diagnose verdicts.'
+  banner('Report');
+  const report = await runReporter({
+    run,
+    feature: options.feature,
+    targetUrl: options.url,
+    provider: options.provider,
+    exploration,
+    plan,
+    generations,
+    executions,
+    healings,
+    reviews,
+    dryRun,
+  });
+  log.info(`Summary written to ${report.summaryPath}`);
+  if (report.pullRequestUrl) {
+    log.info(`Pull request opened: ${report.pullRequestUrl}`);
+  } else if (report.branch) {
+    log.info(
+      `Branch "${report.branch}" pushed, but no pull request was opened (see warnings above).`
     );
+  } else {
+    log.info('No branch or pull request was created (dry run, or nothing to commit).');
   }
 
   const { usage, estimatedUsd } = run.totals();
   log.info(
     `Tokens used: ${String(usage.totalTokens)} (prompt ${String(usage.promptTokens)}, ` +
       `completion ${String(usage.completionTokens)}) ≈ $${estimatedUsd.toFixed(4)}`
-  );
-
-  log.warn(
-    'Review / Report are not wired up yet (phase 6). ' +
-      `All artifacts so far are saved in ${run.dir}.`
   );
 }
 

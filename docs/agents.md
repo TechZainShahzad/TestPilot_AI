@@ -1,11 +1,15 @@
 # Agents
 
-> **Status.** Explorer, Planner, Generator, Executor, and Healer (phases 4–5)
-> are implemented — see [`orchestrator/src/agents/`](../orchestrator/src/agents/)
-> and [`core/executor.ts`](../orchestrator/src/core/executor.ts) for their
-> actual system prompts and logic. The pipeline runs Explore → Plan →
-> Generate → Execute ⇄ Heal end to end. Reviewer and Reporter (phase 6) are
-> specified below as contracts but not yet built.
+> **Status.** The full pipeline is implemented — Explore → Plan →
+> Generate → Execute ⇄ Heal → Review → Report, with Review → Generate on
+> rejection. See [`orchestrator/src/agents/`](../orchestrator/src/agents/) and
+> [`core/`](../orchestrator/src/core/) (`executor.ts`, `static-check.ts`,
+> `git.ts`, `github.ts`) for the actual system prompts and logic. Live LLM
+> calls are unverified pending a Gemini or Groq API key; every deterministic
+> and tool-enforced mechanism (file-tool path scoping, the assertion-weakening
+> guard, the lint/type-check gate, git branch/commit/push, the GitHub PR
+> request) was verified against real code, a disposable scratch repo, and a
+> local HTTP test double respectively — never the real `TestPilot_AI` repo.
 
 ## Pipeline
 
@@ -34,8 +38,8 @@ resumable from any step.
 | **Generator** | `plan.json`, `exploration.json`, existing framework source | file writes under `framework/`                                                   | Must reuse existing page objects; creating a near-duplicate is a review failure                                               |
 | **Executor**  | generated spec paths                                       | `execution-<n>.json` — results, traces, stderr                                   | Read-only with respect to source; it runs tests, it does not edit them                                                        |
 | **Healer**    | `execution-<n>.json`, source under test                    | patches + `healing-<n>.json` with a verdict per failure                          | **May not weaken an assertion.** Fixes locators, waits, setup. Classifies anything else as a suspected app bug and reports it |
-| **Reviewer**  | diff, checklist, lint/typecheck output                     | `review-<n>.json` — verdict + findings                                           | Lint and type-check must pass; a subjective "looks fine" is not a pass                                                        |
-| **Reporter**  | every prior artifact                                       | `summary.md`, pull request                                                       | Opens a PR on a new branch. Never pushes to `main`                                                                            |
+| **Reviewer**  | `generation.json`, real ESLint/`tsc` output                | `review-<n>.json` — verdict + findings                                           | Lint and type-check must pass first, checked outside the model; has no `write_file` tool, so it cannot alter what it reviews  |
+| **Reporter**  | every prior artifact                                       | `summary.md`, pull request                                                       | Opens a PR on a new branch, staging only the exact files generated. Never pushes to `main`. Not an LLM agent — deterministic  |
 
 ## Guardrails, and why each one exists
 
@@ -75,10 +79,35 @@ model can rationalise its way past, so the lint and type-check results are
 attached as evidence and a failing either is an automatic rejection,
 independent of the model's opinion.
 
+This, too, is enforced ahead of the model rather than left to it.
+[`core/static-check.ts`](../orchestrator/src/core/static-check.ts) runs the
+framework's real ESLint and `tsc --build` — scoped to `framework/`,
+deterministic, zero model involvement — before the Reviewer agent is even
+started. If either fails, the round is rejected immediately with the real
+tool output attached as findings, and **no LLM call is made at all**: there
+is no verdict for a model to rationalise past, because it is never consulted.
+Only when both pass does the Reviewer agent run, and even then it is handed
+`read_file`/`list_files` only — it has no `write_file` tool, so a review can
+never itself alter the code it is judging. Verified directly: a scripted
+run against a file with a deliberate lint violation rejects in zero LLM
+turns; a clean file goes to the model, which reviews real file contents and
+its verdict is honoured.
+
 **The output is a pull request.** Not a push, not a commit to `main`. A human
 decides whether generated code enters the repository. The `--dry-run` flag
 stops before the PR; it is also forced on when `GITHUB_TOKEN` is absent, so a
-fresh clone cannot push by accident.
+fresh clone cannot push by accident. The Reporter
+([`agents/reporter.ts`](../orchestrator/src/agents/reporter.ts)) always
+creates a new `testpilot/<feature>-<timestamp>` branch before touching git in
+any other way — there is no code path that commits to the current branch —
+and stages only the exact files `generation.json` recorded, never `git add
+-A`. Verified against a disposable scratch repository with its own local
+bare remote (never the real `TestPilot_AI` repo): branch creation, staging,
+committing, and pushing all behave correctly, and `stagePaths([])` refuses to
+run a bare `git add`. The GitHub pull-request call itself was verified
+against a local HTTP test double standing in for `api.github.com` — correct
+method, auth header, and request body, plus correct error handling on a
+non-2xx response — again without ever contacting the real API.
 
 **Cost and time are capped.** `MAX_TOKENS_PER_RUN`, `MAX_USD_PER_RUN` and
 `AGENT_STEP_TIMEOUT_MS` abort the run when exceeded. Token usage is recorded
@@ -164,16 +193,23 @@ in this phase needed it yet.
 
 ```
 orchestrator/runs/<timestamp>/
-  run.json             options, provider, limits, final status
-  run.log              JSONL — every step, input, output, token count
-  exploration.json     Explorer output
-  plan.md / plan.json  Planner output
-  generated/           files written, as a reviewable diff
-  execution-1.json     Executor output (one per attempt)
-  healing-1.json       Healer verdicts (one per attempt)
-  review-1.json        Reviewer findings (one per round)
-  summary.md           Reporter output — also the PR body
+  run.json                 feature, target URL, provider, start time
+  run.log                  JSONL — every tool call, result, and error, per agent
+  exploration.json         Explorer output
+  plan.md / plan.json      Planner output (plan.md is the human-readable render)
+  generation.json          Generator output — files written, reused page objects (one per round)
+  execution-<n>.json       Executor output (one per Execute/Heal attempt)
+  healing-<n>.json         Healer verdicts (one per attempt)
+  static-check-<n>.json    Raw ESLint/tsc output the Reviewer gated on (one per round)
+  review-<n>.json          Reviewer verdict + findings (one per round)
+  pull-request.json        { url, number } — only written if a PR was actually opened
+  summary.md               Reporter output — also the PR body
 ```
+
+Generated and healed source files land directly in `framework/`, not inside
+the run folder — the run folder has the paths and reasons
+(`generation.json`'s `filesWritten`), and `git diff` against the branch the
+Reporter created is the actual reviewable diff.
 
 A sample is committed under [`examples/`](../examples/) so the output can be
 read without running anything.

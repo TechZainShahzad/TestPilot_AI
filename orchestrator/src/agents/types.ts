@@ -127,3 +127,22 @@ export const healingResultSchema = z.object({
   verdicts: z.array(healingVerdictSchema),
 });
 export type HealingResult = z.infer<typeof healingResultSchema>;
+
+// ------------------------------------------------------------------ Reviewer --
+
+export const reviewFindingSchema = z.object({
+  file: z.string(),
+  issue: z.string(),
+  severity: z.enum(['blocking', 'advisory']),
+});
+export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
+
+export const reviewResultSchema = z.object({
+  round: z.number(),
+  verdict: z.enum(['approved', 'rejected']),
+  lintPassed: z.boolean(),
+  typecheckPassed: z.boolean(),
+  findings: z.array(reviewFindingSchema),
+  summary: z.string(),
+});
+export type ReviewResult = z.infer<typeof reviewResultSchema>;
