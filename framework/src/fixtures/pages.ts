@@ -10,6 +10,7 @@ import { CartPage } from '../pages/cart-page.js';
 import { CheckoutCompletePage } from '../pages/checkout-complete-page.js';
 import { CheckoutStepOnePage } from '../pages/checkout-step-one-page.js';
 import { CheckoutStepTwoPage } from '../pages/checkout-step-two-page.js';
+import { DynamicCatalogPage } from '../pages/dynamic-catalog-page.js';
 import { InventoryPage } from '../pages/inventory-page.js';
 import { LoginPage } from '../pages/login-page.js';
 import { ProductDetailPage } from '../pages/product-detail-page.js';
@@ -22,6 +23,7 @@ export interface PageFixtures {
   checkoutStepTwoPage: CheckoutStepTwoPage;
   checkoutCompletePage: CheckoutCompletePage;
   productDetailPage: ProductDetailPage;
+  dynamicCatalogPage: DynamicCatalogPage;
 }
 
 export const test = base.extend<PageFixtures>({
@@ -45,6 +47,9 @@ export const test = base.extend<PageFixtures>({
   },
   productDetailPage: async ({ page }, use) => {
     await use(new ProductDetailPage(page));
+  },
+  dynamicCatalogPage: async ({ page }, use) => {
+    await use(new DynamicCatalogPage(page));
   },
 });
 
