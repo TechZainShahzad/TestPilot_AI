@@ -21,7 +21,7 @@
 import type { AssistantTurn, LlmProvider, ToolDefinition, ToolResult } from '../providers/types.js';
 import { agentPrefix } from '../util/agents-meta.js';
 import { withSpinner } from '../util/spinner.js';
-import type { RunContext } from './run.js';
+import type { LlmCallRecord, RunContext } from './run.js';
 
 export interface ToolImplementation {
   definition: ToolDefinition;
@@ -62,6 +62,52 @@ function previewArgs(args: Record<string, unknown>): string {
   return joined.length > 80 ? `${joined.slice(0, 80)}…` : joined;
 }
 
+/** Same truncate-for-a-status-line treatment as {@link previewArgs}, for
+ * plain strings (a system prompt, a user message, an assistant reply). */
+function previewText(text: string, maxLen = 120): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  return collapsed.length > maxLen ? `${collapsed.slice(0, maxLen)}…` : collapsed;
+}
+
+/**
+ * Records one full LLM turn to `llm-calls.jsonl` (always, full fidelity —
+ * see {@link LlmCallRecord}), and, only when `run.verboseLlm` is set, also
+ * prints a truncated live preview of the same request/response to the
+ * console — the file is the lossless record, this is an opt-in window
+ * into it, off by default so a normal run keeps its clean, cosmetic
+ * output.
+ */
+function logLlmCall(
+  run: RunContext,
+  prefix: string,
+  agentName: string,
+  step: number,
+  request: LlmCallRecord['request'],
+  turn: AssistantTurn
+): void {
+  run.recordLlmCall({
+    agent: agentName,
+    step,
+    request,
+    response: { text: turn.text, toolCalls: turn.toolCalls },
+  });
+
+  if (!run.verboseLlm) return;
+
+  const sent =
+    request.systemPrompt !== undefined
+      ? `system(${String(request.systemPrompt.length)} chars) + user: "${previewText(request.userMessage ?? '')}"`
+      : `tool result(s): ${(request.toolResults ?? []).map((r) => r.name).join(', ')}`;
+  const got =
+    turn.toolCalls.length > 0
+      ? turn.toolCalls.map((c) => `${c.name}(${previewArgs(c.arguments)})`).join('; ')
+      : '(no tool calls)';
+  const text = turn.text !== undefined && turn.text.length > 0 ? ` | text: "${previewText(turn.text)}"` : '';
+
+  console.log(`  ${prefix} ⇄ sent: ${sent}`);
+  console.log(`  ${prefix} ⇄ got:  ${got}${text}`);
+}
+
 export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
   const { agentName, provider, systemPrompt, userMessage, tools, submitToolName, maxSteps, run } =
     options;
@@ -82,6 +128,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     )
   );
   recordUsage(run, provider, agentName);
+  logLlmCall(run, prefix, agentName, 0, { systemPrompt, userMessage }, turn);
 
   for (let step = 1; step <= maxSteps; step += 1) {
     run.assertWithinBudget();
@@ -157,6 +204,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       provider.continueWithToolResults(results)
     );
     recordUsage(run, provider, agentName);
+    logLlmCall(
+      run,
+      prefix,
+      agentName,
+      step,
+      { toolResults: results.map((r) => ({ name: r.name, result: r.result })) },
+      turn
+    );
   }
 
   throw new AgentLoopError(

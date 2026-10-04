@@ -18,6 +18,32 @@ export interface StepLogEntry {
   detail: Record<string, unknown>;
 }
 
+/**
+ * One full LLM turn — exactly what was sent and exactly what came back —
+ * for every agent, every step. `run.appendStep` already records tool
+ * calls/results and assistant text individually, but never the request
+ * side (the system prompt, the user message, or the tool-results payload
+ * actually sent that turn) paired against the response as one unit. This
+ * is the dedicated, lossless answer to "what did we ask, what did it
+ * return" that `appendStep`'s per-tool-call granularity doesn't give you.
+ */
+export interface LlmCallRecord {
+  ts: string;
+  agent: string;
+  /** 0 for the opening `start()` call, then the loop step number for every
+   * `continueWithToolResults()` call after it. */
+  step: number;
+  request: {
+    systemPrompt?: string;
+    userMessage?: string;
+    toolResults?: { name: string; result: unknown }[];
+  };
+  response: {
+    text: string | undefined;
+    toolCalls: { name: string; arguments: Record<string, unknown> }[];
+  };
+}
+
 /** Rough USD-per-1K-token pricing, for a ballpark cost estimate in the
  * summary only — not billed anywhere, so approximate is fine. Free tiers
  * mean the honest answer is usually "$0.00", which the summary states. */
@@ -38,18 +64,25 @@ export class RunContext {
   readonly log: Logger;
 
   private readonly logPath: string;
+  private readonly llmCallsPath: string;
   private usageByAgent = new Map<string, TokenUsage>();
 
   constructor(
     readonly feature: string,
     readonly targetUrl: string,
-    readonly provider: string
+    readonly provider: string,
+    /** When true, every LLM call's full request/response is also echoed,
+     * truncated, to the console as it happens — see `core/agent-loop.ts`.
+     * `llm-calls.jsonl` is written either way; this only controls the
+     * live terminal preview. */
+    readonly verboseLlm = false
   ) {
     this.startedAt = new Date();
     const stamp = this.startedAt.toISOString().replace(/[:.]/g, '-');
     this.dir = resolve(RUNS_ROOT, stamp);
     mkdirSync(this.dir, { recursive: true });
     this.logPath = resolve(this.dir, 'run.log');
+    this.llmCallsPath = resolve(this.dir, 'llm-calls.jsonl');
     this.log = createLogger('run');
 
     this.saveJson('run.json', {
@@ -71,6 +104,13 @@ export class RunContext {
   appendStep(entry: Omit<StepLogEntry, 'ts'>): void {
     const full: StepLogEntry = { ts: new Date().toISOString(), ...entry };
     appendFileSync(this.logPath, `${JSON.stringify(full)}\n`);
+  }
+
+  /** Appends one full request/response pair to `llm-calls.jsonl` — every
+   * LLM call this run makes, across every agent, in one file. */
+  recordLlmCall(entry: Omit<LlmCallRecord, 'ts'>): void {
+    const full: LlmCallRecord = { ts: new Date().toISOString(), ...entry };
+    appendFileSync(this.llmCallsPath, `${JSON.stringify(full)}\n`);
   }
 
   recordUsage(agent: string, usage: TokenUsage): void {

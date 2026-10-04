@@ -63,6 +63,10 @@ export interface CliOptions {
   /** Run the Explorer's browser and the real Executor test run visibly
    * instead of headless. */
   headed: boolean;
+  /** Also print a truncated live preview of every LLM request/response to
+   * the console. `runs/<timestamp>/llm-calls.jsonl` always gets the full,
+   * untruncated record regardless of this flag. */
+  verboseLlm: boolean;
 }
 
 const USAGE = `
@@ -88,6 +92,9 @@ Options:
   -l, --log-level <level>   ${LOG_LEVELS.join(' | ')} (default: info)
   -H, --headed              Show both the Explorer's browser and the real test run
                             instead of running headless
+      --verbose-llm         Print a live, truncated preview of every LLM request
+                            and response. The full record is always written to
+                            runs/<timestamp>/llm-calls.jsonl regardless of this flag
   -h, --help                Show this message
 
 Examples:
@@ -95,6 +102,7 @@ Examples:
   npm run orchestrate -- --feature "Product Sorting" --dry-run --log-level debug
   npm run orchestrate -- --feature "Burger Menu" --dry-run --headed
   npm run orchestrate -- --jira-ticket PROJ-123 --dry-run
+  npm run orchestrate -- --feature "Burger Menu" --dry-run --verbose-llm
 `;
 
 class UsageError extends Error {}
@@ -109,6 +117,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
   let logLevel: LogLevel = 'info';
   let maxHealAttempts = config.limits.maxHealAttempts;
   let headed = false;
+  let verboseLlm = false;
 
   /** Read the value that follows a flag, failing loudly when it is missing. */
   const valueFor = (flag: string, index: number): string => {
@@ -150,6 +159,9 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       case '-H':
       case '--headed':
         headed = true;
+        break;
+      case '--verbose-llm':
+        verboseLlm = true;
         break;
       case '-p':
       case '--provider': {
@@ -220,6 +232,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     logLevel,
     maxHealAttempts,
     headed,
+    verboseLlm,
   };
 }
 
@@ -312,6 +325,7 @@ async function main(): Promise<void> {
     model: modelFor(options.provider),
     dryRun: options.dryRun,
     headed: options.headed,
+    verboseLlm: options.verboseLlm,
     limits: { ...config.limits, maxHealAttempts: options.maxHealAttempts },
   });
 
@@ -361,7 +375,7 @@ async function main(): Promise<void> {
   log.info(`Provider: ${options.provider} (${modelFor(options.provider)})`);
   log.info(`Mode:     ${dryRun ? 'dry run — no pull request' : 'full run — opens a pull request'}`);
 
-  const run = new RunContext(feature, options.url, options.provider);
+  const run = new RunContext(feature, options.url, options.provider, options.verboseLlm);
   log.info(`Run folder: ${run.dir}`);
 
   const provider = createProvider(options.provider);

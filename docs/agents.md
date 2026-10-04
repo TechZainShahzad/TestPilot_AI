@@ -341,6 +341,8 @@ in this phase needed it yet.
 orchestrator/runs/<timestamp>/
   run.json                 feature, target URL, provider, start time
   run.log                  JSONL — every tool call, result, and error, per agent
+  llm-calls.jsonl          JSONL — every LLM request/response, full and untruncated,
+                           across every agent (`--verbose-llm` also previews this live)
   exploration.json         Explorer output
   plan.md / plan.json      Planner output (plan.md is the human-readable render)
   generation.json          Generator output — files written, reused page objects (one per round)
