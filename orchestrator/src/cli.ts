@@ -439,7 +439,8 @@ async function main(): Promise<void> {
   if (plan.requirementsCoverage.length > 0) {
     log.info('Requirements understood from the ticket:');
     for (const entry of plan.requirementsCoverage) {
-      const cases = entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '— no case maps to this (gap)';
+      const cases =
+        entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '— no case maps to this (gap)';
       log.info(`  • ${entry.criterion} → ${cases}`);
     }
   }

@@ -40,7 +40,7 @@ function metaFor(key: string): AgentMeta {
   return AGENTS_META[key] ?? { step: 0, icon: '•', label: key };
 }
 
-/** "🔍 Step 2/8 · Explorer" or, with a suffix, "✍️ Step 4/8 · Generator — round 1". */
+/** "🔍 Step 3/9 · Explorer" or, with a suffix, "✍️ Step 5/9 · Generator — round 1". */
 export function stageLine(key: string, suffix?: string): string {
   const meta = metaFor(key);
   const base = `${meta.icon} Step ${String(meta.step)}/${String(PIPELINE_STEPS)} · ${meta.label}`;

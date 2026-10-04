@@ -86,7 +86,8 @@ function renderPlanMarkdown(plan: TestPlan): string {
   if (plan.requirementsCoverage.length > 0) {
     lines.push('## Requirements traceability', '');
     for (const entry of plan.requirementsCoverage) {
-      const cases = entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '**no case maps to this**';
+      const cases =
+        entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '**no case maps to this**';
       lines.push(`- ${entry.criterion} → ${cases}`);
     }
     lines.push('');

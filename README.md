@@ -79,6 +79,10 @@ The two halves are deliberately separable. The framework stands on its own as
 a test suite; the orchestrator is a client of it that happens to write code
 into it. Neither imports the other.
 
+For the full pipeline as one diagram — every branch, every file each stage
+writes — see [`docs/workflow.md`](docs/workflow.md). For a dedicated page per
+agent, see [`docs/agents/`](docs/agents/).
+
 ---
 
 ## Quick start

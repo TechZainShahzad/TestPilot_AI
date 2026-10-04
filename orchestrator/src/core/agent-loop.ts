@@ -106,7 +106,8 @@ function logLlmCall(
     turn.toolCalls.length > 0
       ? turn.toolCalls.map((c) => `${c.name}(${previewArgs(c.arguments)})`).join('; ')
       : '(no tool calls)';
-  const text = turn.text !== undefined && turn.text.length > 0 ? ` | text: "${previewText(turn.text)}"` : '';
+  const text =
+    turn.text !== undefined && turn.text.length > 0 ? ` | text: "${previewText(turn.text)}"` : '';
 
   console.log(`  ${prefix} ⇄ [${model}] sent: ${sent}`);
   console.log(`  ${prefix} ⇄ got:  ${got}${text}`);

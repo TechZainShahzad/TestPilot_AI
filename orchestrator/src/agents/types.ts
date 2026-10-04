@@ -15,10 +15,14 @@ export const requirementsBriefSchema = z.object({
     .describe('Plain-language restatement of what this ticket actually asks for, in 1-3 sentences'),
   acceptanceCriteria: z
     .array(z.string())
-    .describe('Each acceptance criterion from the ticket, extracted as its own entry, as close to the original wording as possible — never merged or invented'),
+    .describe(
+      'Each acceptance criterion from the ticket, extracted as its own entry, as close to the original wording as possible — never merged or invented'
+    ),
   explorationHints: z
     .array(z.string())
-    .describe('Concrete guidance for the Explorer: which pages, UI states, or flows to look for to exercise each criterion'),
+    .describe(
+      'Concrete guidance for the Explorer: which pages, UI states, or flows to look for to exercise each criterion'
+    ),
   openQuestions: z
     .array(z.string())
     .describe('Anything genuinely ambiguous or unverifiable from the ticket text alone'),
