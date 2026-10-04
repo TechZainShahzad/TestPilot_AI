@@ -33,6 +33,10 @@ export interface LlmCallRecord {
   /** 0 for the opening `start()` call, then the loop step number for every
    * `continueWithToolResults()` call after it. */
   step: number;
+  /** The model that actually handled this call — `provider.getResolvedModel()`
+   * when the provider can only know it after a call (claude-code's own
+   * subscription default), otherwise `provider.model`. */
+  model: string;
   request: {
     systemPrompt?: string;
     userMessage?: string;

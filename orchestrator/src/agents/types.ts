@@ -7,6 +7,24 @@
  */
 import { z } from 'zod';
 
+// ----------------------------------------------------------------- Analyst --
+
+export const requirementsBriefSchema = z.object({
+  understanding: z
+    .string()
+    .describe('Plain-language restatement of what this ticket actually asks for, in 1-3 sentences'),
+  acceptanceCriteria: z
+    .array(z.string())
+    .describe('Each acceptance criterion from the ticket, extracted as its own entry, as close to the original wording as possible — never merged or invented'),
+  explorationHints: z
+    .array(z.string())
+    .describe('Concrete guidance for the Explorer: which pages, UI states, or flows to look for to exercise each criterion'),
+  openQuestions: z
+    .array(z.string())
+    .describe('Anything genuinely ambiguous or unverifiable from the ticket text alone'),
+});
+export type RequirementsBrief = z.infer<typeof requirementsBriefSchema>;
+
 // ---------------------------------------------------------------- Explorer --
 
 export const elementCandidateSchema = z.object({

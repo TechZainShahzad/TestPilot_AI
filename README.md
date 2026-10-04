@@ -40,6 +40,7 @@ A human merges. Nothing is ever pushed straight to `main`.
 flowchart LR
   subgraph ORCH["orchestrator/ — multi-agent pipeline"]
     direction LR
+    AN["🧠 Analyst<br/><sub>reads the ticket,<br/>briefs the Explorer</sub>"]
     EX["🔍 Explorer<br/><sub>real browser, DOM +<br/>a11y snapshots</sub>"]
     PL["📋 Planner<br/><sub>test plan<br/>md + json</sub>"]
     GE["✍️ Generator<br/><sub>pages, fixtures,<br/>builders, specs</sub>"]
@@ -48,6 +49,7 @@ flowchart LR
     RV["🔬 Reviewer<br/><sub>checklist +<br/>lint/typecheck</sub>"]
     RP["📣 Reporter<br/><sub>summary +<br/>pull request</sub>"]
 
+    AN -. "only with --jira-ticket" .-> EX
     EX --> PL --> GE --> RU
     RU -- "failures" --> HE
     HE -- "re-run (max 3)" --> RU

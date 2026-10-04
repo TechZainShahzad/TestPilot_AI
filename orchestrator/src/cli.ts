@@ -12,6 +12,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { briefedRequirements, runAnalyst } from './agents/analyst.js';
 import { runExplorer } from './agents/explorer.js';
 import { runGenerator } from './agents/generator.js';
 import { runHealer } from './agents/healer.js';
@@ -380,6 +381,37 @@ async function main(): Promise<void> {
 
   const provider = createProvider(options.provider);
 
+  let modelAnnounced = false;
+  /** Prints the actually-resolved model the first time it's known — for
+   * claude-code, that's only after its first real call (see
+   * `ClaudeCodeProvider.getResolvedModel`), so this is called after every
+   * early stage rather than assumed available upfront. A no-op once
+   * already announced. */
+  const announceResolvedModel = (): void => {
+    if (modelAnnounced) return;
+    const resolved = provider.getResolvedModel?.();
+    if (resolved === undefined) return;
+    modelAnnounced = true;
+    log.info(`Model resolved: ${resolved}`);
+  };
+
+  if (requirements !== undefined) {
+    banner(stageLine('analyst'));
+    const brief = await runAnalyst({ provider, run, feature, requirements });
+    log.info(`Understanding: ${brief.understanding}`);
+    log.info(`Acceptance criteria (${String(brief.acceptanceCriteria.length)}):`);
+    for (const criterion of brief.acceptanceCriteria) log.info(`  • ${criterion}`);
+    if (brief.openQuestions.length > 0) {
+      log.info(`Open questions (${String(brief.openQuestions.length)}):`);
+      for (const question of brief.openQuestions) log.info(`  ? ${question}`);
+    }
+    announceResolvedModel();
+    // Downstream agents (Explorer, Planner) now read this distilled
+    // understanding instead of the raw ticket text alone — this is the
+    // actual mechanism by which exploration is informed, not blind.
+    requirements = briefedRequirements(requirements, brief);
+  }
+
   banner(stageLine('explorer'));
   const exploration = await runExplorer({
     provider,
@@ -389,6 +421,7 @@ async function main(): Promise<void> {
     headless: !options.headed,
     ...(requirements !== undefined && { requirements }),
   });
+  announceResolvedModel();
   log.info(
     `Explorer found ${String(exploration.pages.length)} page(s), ` +
       `${String(exploration.elements.length)} element(s), ${String(exploration.flows.length)} flow(s).`
@@ -523,10 +556,7 @@ async function main(): Promise<void> {
     log.info('No branch or pull request was created (dry run, or nothing to commit).');
   }
 
-  const resolvedModel = provider.getResolvedModel?.();
-  if (resolvedModel !== undefined && resolvedModel !== modelFor(options.provider)) {
-    log.info(`Model used: ${resolvedModel}`);
-  }
+  announceResolvedModel();
 
   const { usage, estimatedUsd } = run.totals();
   const listPriceUsd = provider.getListPriceUsd?.();

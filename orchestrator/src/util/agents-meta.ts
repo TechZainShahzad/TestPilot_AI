@@ -15,17 +15,21 @@ export interface AgentMeta {
   label: string;
 }
 
-export const PIPELINE_STEPS = 8;
+export const PIPELINE_STEPS = 9;
 
 export const AGENTS_META: Record<string, AgentMeta> = {
   jira: { step: 1, icon: '🎫', label: 'Jira' },
-  explorer: { step: 2, icon: '🔍', label: 'Explorer' },
-  planner: { step: 3, icon: '📋', label: 'Planner' },
-  generator: { step: 4, icon: '✍️', label: 'Generator' },
-  executor: { step: 5, icon: '▶️', label: 'Executor' },
-  healer: { step: 6, icon: '🔧', label: 'Healer' },
-  reviewer: { step: 7, icon: '🔬', label: 'Reviewer' },
-  reporter: { step: 8, icon: '📣', label: 'Reporter' },
+  // Only runs when --jira-ticket is given — there is no ticket to
+  // brainstorm about on a plain --feature run. Still reserves step 2 even
+  // when skipped, same convention the Jira step itself already uses.
+  analyst: { step: 2, icon: '🧠', label: 'Analyst' },
+  explorer: { step: 3, icon: '🔍', label: 'Explorer' },
+  planner: { step: 4, icon: '📋', label: 'Planner' },
+  generator: { step: 5, icon: '✍️', label: 'Generator' },
+  executor: { step: 6, icon: '▶️', label: 'Executor' },
+  healer: { step: 7, icon: '🔧', label: 'Healer' },
+  reviewer: { step: 8, icon: '🔬', label: 'Reviewer' },
+  reporter: { step: 9, icon: '📣', label: 'Reporter' },
 };
 
 /** Falls back to a generic, still-numbered-looking identity for a key not

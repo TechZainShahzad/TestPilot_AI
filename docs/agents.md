@@ -34,10 +34,13 @@
 ## Pipeline
 
 ```
-Explore → Plan → Generate → Execute ⇄ Heal → Review → Report
-                     ↑__________________________|
-                        (review rejection)
+(Analyst →) Explore → Plan → Generate → Execute ⇄ Heal → Review → Report
+                                 ↑__________________________|
+                                    (review rejection)
 ```
+
+Analyst only runs with `--jira-ticket` — a plain `--feature` run has no ticket
+to brainstorm about, so it starts straight at Explore.
 
 A linear state machine with exactly two loops: `Execute ⇄ Heal`, bounded by
 `MAX_HEAL_ATTEMPTS`, and `Review → Generate`, bounded by `MAX_REVIEW_ROUNDS`.
@@ -85,7 +88,8 @@ deserves its own pass with its own review, not a side effect of this one.
 
 | Agent         | Reads                                                                        | Writes                                                                           | Hard guardrail                                                                                                                |
 | ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Explorer**  | target URL, feature description, optional requirements text (e.g. from Jira) | `exploration.json` — pages, elements, flows, locator candidates                  | Never guesses: every locator candidate is read from a live DOM / accessibility snapshot                                       |
+| **Analyst**   | raw ticket text (only runs with `--jira-ticket`)                            | `brief.md` + `brief.json` — understanding, acceptance criteria, exploration hints, open questions | No browser, no code access — reasons over the ticket's own text only; never invents a criterion the ticket doesn't state      |
+| **Explorer**  | target URL, feature description, requirements text briefed by the Analyst (or raw, with a plain `--feature`) | `exploration.json` — pages, elements, flows, locator candidates                  | Never guesses: every locator candidate is read from a live DOM / accessibility snapshot                                       |
 | **Planner**   | `exploration.json`, feature description, optional requirements text          | `plan.md` + `plan.json` — cases with priority, type (positive/negative/boundary) | Must produce negative _and_ boundary cases, not just happy paths; every explicit acceptance criterion must map to a case      |
 | **Generator** | `plan.json`, `exploration.json`, existing framework source                   | file writes under `framework/`                                                   | Must reuse existing page objects; creating a near-duplicate is a review failure                                               |
 | **Executor**  | generated spec paths                                                         | `execution-<n>.json` — results, traces, stderr                                   | Read-only with respect to source; it runs tests, it does not edit them                                                        |
@@ -343,6 +347,7 @@ orchestrator/runs/<timestamp>/
   run.log                  JSONL — every tool call, result, and error, per agent
   llm-calls.jsonl          JSONL — every LLM request/response, full and untruncated,
                            across every agent (`--verbose-llm` also previews this live)
+  brief.md / brief.json    Analyst output (only with --jira-ticket)
   exploration.json         Explorer output
   plan.md / plan.json      Planner output (plan.md is the human-readable render)
   generation.json          Generator output — files written, reused page objects (one per round)

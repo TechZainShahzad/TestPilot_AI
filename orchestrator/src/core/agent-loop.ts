@@ -79,15 +79,19 @@ function previewText(text: string, maxLen = 120): string {
  */
 function logLlmCall(
   run: RunContext,
+  provider: LlmProvider,
   prefix: string,
   agentName: string,
   step: number,
   request: LlmCallRecord['request'],
   turn: AssistantTurn
 ): void {
+  const model = provider.getResolvedModel?.() ?? provider.model;
+
   run.recordLlmCall({
     agent: agentName,
     step,
+    model,
     request,
     response: { text: turn.text, toolCalls: turn.toolCalls },
   });
@@ -104,7 +108,7 @@ function logLlmCall(
       : '(no tool calls)';
   const text = turn.text !== undefined && turn.text.length > 0 ? ` | text: "${previewText(turn.text)}"` : '';
 
-  console.log(`  ${prefix} ⇄ sent: ${sent}`);
+  console.log(`  ${prefix} ⇄ [${model}] sent: ${sent}`);
   console.log(`  ${prefix} ⇄ got:  ${got}${text}`);
 }
 
@@ -128,7 +132,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     )
   );
   recordUsage(run, provider, agentName);
-  logLlmCall(run, prefix, agentName, 0, { systemPrompt, userMessage }, turn);
+  logLlmCall(run, provider, prefix, agentName, 0, { systemPrompt, userMessage }, turn);
 
   for (let step = 1; step <= maxSteps; step += 1) {
     run.assertWithinBudget();
@@ -206,6 +210,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     recordUsage(run, provider, agentName);
     logLlmCall(
       run,
+      provider,
       prefix,
       agentName,
       step,
