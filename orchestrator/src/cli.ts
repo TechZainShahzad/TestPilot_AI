@@ -60,7 +60,8 @@ export interface CliOptions {
   logLevel: LogLevel;
   /** Override the per-run heal ceiling from `.env`. */
   maxHealAttempts: number;
-  /** Run the Explorer's browser visibly instead of headless. */
+  /** Run the Explorer's browser and the real Executor test run visibly
+   * instead of headless. */
   headed: boolean;
 }
 
@@ -85,7 +86,8 @@ Options:
       --max-heal <n>        Max heal attempts before giving up
                             (default: ${String(config.limits.maxHealAttempts)})
   -l, --log-level <level>   ${LOG_LEVELS.join(' | ')} (default: info)
-  -H, --headed              Show the Explorer's browser instead of running headless
+  -H, --headed              Show both the Explorer's browser and the real test run
+                            instead of running headless
   -h, --help                Show this message
 
 Examples:
@@ -419,7 +421,7 @@ async function main(): Promise<void> {
     banner(stageLine('executor'));
     healAttempt += 1;
     let execution = await withSpinner(`${agentPrefix('executor')} is running the suite…`, () =>
-      runExecutor({ run, specFiles, attempt: healAttempt })
+      runExecutor({ run, specFiles, attempt: healAttempt, ...(options.headed && { headed: true }) })
     );
     executions.push(execution);
     log.info(
@@ -437,7 +439,12 @@ async function main(): Promise<void> {
       healAttempt += 1;
       banner(stageLine('executor', `attempt ${String(healAttempt)}`));
       execution = await withSpinner(`${agentPrefix('executor')} is running the suite…`, () =>
-        runExecutor({ run, specFiles, attempt: healAttempt })
+        runExecutor({
+          run,
+          specFiles,
+          attempt: healAttempt,
+          ...(options.headed && { headed: true }),
+        })
       );
       executions.push(execution);
       log.info(

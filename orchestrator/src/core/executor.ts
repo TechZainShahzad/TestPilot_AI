@@ -100,10 +100,21 @@ export interface ExecutorOptions {
   specFiles: string[];
   attempt: number;
   timeoutMs?: number;
+  /**
+   * When true, forces this real Playwright run to be headed, regardless of
+   * the framework's own `HEADLESS` in `.env` — the orchestrator's
+   * `--headed` flag controlling the actual test execution the same way it
+   * already controls the Explorer's browser, rather than being a second,
+   * unrelated setting a user has to remember to also flip. Omitted (not
+   * `false`) leaves `.env`'s own value untouched, so an existing
+   * `HEADLESS=false` setup keeps working exactly as it did before this
+   * flag existed.
+   */
+  headed?: boolean;
 }
 
 export async function runExecutor(options: ExecutorOptions): Promise<ExecutionResult> {
-  const { run, specFiles, attempt, timeoutMs = 300_000 } = options;
+  const { run, specFiles, attempt, timeoutMs = 300_000, headed } = options;
 
   if (specFiles.length === 0) {
     throw new Error('runExecutor: no spec files to run.');
@@ -114,7 +125,12 @@ export async function runExecutor(options: ExecutorOptions): Promise<ExecutionRe
     const result = await execFileAsync(
       process.execPath,
       [resolvePlaywrightCli(), 'test', '--reporter=json', ...specFiles],
-      { cwd: FRAMEWORK_ROOT, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 }
+      {
+        cwd: FRAMEWORK_ROOT,
+        timeout: timeoutMs,
+        maxBuffer: 64 * 1024 * 1024,
+        ...(headed === true && { env: { ...process.env, HEADLESS: 'false' } }),
+      }
     );
     stdout = result.stdout;
   } catch (error) {
