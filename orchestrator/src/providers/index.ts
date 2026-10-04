@@ -1,4 +1,5 @@
 import { activeApiKey, apiKeyEnvVar, config, type ProviderName } from '../core/config.js';
+import { ClaudeCodeProvider } from './claude-code.js';
 import { GeminiProvider } from './gemini.js';
 import { GroqProvider } from './groq.js';
 import type { LlmProvider } from './types.js';
@@ -20,5 +21,7 @@ export function createProvider(provider: ProviderName = config.provider): LlmPro
       return new GeminiProvider(apiKey, config.gemini.model);
     case 'groq':
       return new GroqProvider(apiKey, config.groq.model);
+    case 'claude-code':
+      return new ClaudeCodeProvider(config.claudeCode.model, config.limits.agentStepTimeoutMs);
   }
 }

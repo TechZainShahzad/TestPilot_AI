@@ -15,16 +15,21 @@
 > confirmed live" below for what that run found and fixed.
 >
 > **The full pipeline, Explore through Report, has been run to completion
-> once** (the committed [`examples/`](../examples/) run) with every
-> mechanical action genuinely real — live browser, live `write_file` calls,
-> live Playwright execution, live ESLint/`tsc`. The one thing not live in
-> that run was the model's reasoning itself: Groq's 200,000-token daily cap
-> was exhausted by the Explore/Plan debugging session before a full live
-> pass could complete, and no Gemini key was configured as a fallback, so a
-> disclosed deterministic script stood in for the LLM call — see
+> once with every mechanical action genuinely real** (the committed
+> [`examples/`](../examples/) run) — live browser, live `write_file` calls,
+> live Playwright execution, live ESLint/`tsc` — but with a disclosed
+> deterministic script standing in for the model's own reasoning, since
+> Groq's 200,000-token daily cap was exhausted by earlier debugging before
+> a full live pass could complete; see
 > [`examples/README.md`](../examples/README.md) for exactly what that means
-> and does not mean. A fully live run, start to finish, is still the one
-> thing left to verify once quota allows.
+> and does not mean.
+>
+> **A fully live run — a real model making every decision, start to
+> finish — has since completed successfully on `claude-code`**: Explore (2
+> pages, 10 elements), Plan (15 cases), Generate (3 files), Execute (8/8
+> passed first try, no healing needed), and a genuinely substantive Review
+> (approved, with specific advisory findings, not boilerplate). See "Claude
+> Code CLI, confirmed live" below.
 
 ## Pipeline
 
@@ -162,17 +167,72 @@ per agent step and totalled in the run summary.
 
 ## Provider layer
 
-The agents talk to a narrow interface — a chat call, tool declarations, and
-token accounting — with two implementations behind it:
+The agents talk to a narrow interface — `start()` / `continueWithToolResults()`
+/ `getUsage()` — with three implementations behind it:
 
-| Provider             | Default model         | Why                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Gemini** (default) | `gemini-2.5-flash`    | Free tier, native function calling, and a context window large enough to pass real framework source as grounding                                                                                                                                                                                                                                                                                                    |
-| **Groq** (alternate) | `openai/gpt-oss-120b` | Free tier, very fast; confirmed live to call tools correctly via Groq's OpenAI-compatible API. (Groq decommissioned the `llama-3.3-70b-versatile` model this was originally built against — model availability on free-tier providers moves faster than most dependencies, worth knowing if `GROQ_MODEL`'s default ever 404s again.) A useful check that nothing in the pipeline has quietly coupled to one vendor. |
+| Provider                         | Default model                          | Why                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gemini** (default)             | `gemini-2.5-flash`                     | Free tier, native function calling, and a context window large enough to pass real framework source as grounding                                                                                                                                                                                                                                                                                                    |
+| **Groq**                         | `openai/gpt-oss-120b`                  | Free tier, very fast; confirmed live to call tools correctly via Groq's OpenAI-compatible API. (Groq decommissioned the `llama-3.3-70b-versatile` model this was originally built against — model availability on free-tier providers moves faster than most dependencies, worth knowing if `GROQ_MODEL`'s default ever 404s again.) A useful check that nothing in the pipeline has quietly coupled to one vendor. |
+| **Claude Code CLI** (local-only) | whatever `claude` is configured to use | No per-minute/per-day token ceiling to work around — confirmed live, see below. Trades that for being unusable in CI: it shells out to an already-authenticated `claude` CLI session (a Claude subscription), not an API key.                                                                                                                                                                                       |
 
 The abstraction is not speculative generality: it is what keeps the project
-runnable by anyone who clones it, since both tiers are free, and switching is
-`LLM_PROVIDER=groq`.
+runnable by anyone who clones it on a free tier, and also what let a third,
+materially different provider — one with no HTTP API at all — slot in as
+"just another `LlmProvider` implementation" rather than a special case
+threaded through every agent.
+
+### Claude Code CLI, confirmed live
+
+Groq and Gemini's free tiers are tight enough that a single agent turn in
+this pipeline can exceed them — confirmed live, see "Groq's free tier"
+below, and more sharply: a real run hit a `413 Request too large` mid-Generate
+that crashed the whole process (the SDK only retries `429`s; see
+`groq.ts`'s `createWithRetry`). `claude-code` exists for local runs where
+that headroom matters, built on three things confirmed live against the
+real CLI before writing any code against them, not assumed from `--help`:
+
+- **The prompt goes over stdin**, not argv — confirmed with a 10,000+
+  character prompt. A Planner/Generator turn carrying a full
+  `exploration.json`/`plan.json` payload would otherwise blow Windows'
+  ~8KB command-line length limit.
+- **`--json-schema` reliably disambiguates multiple tools in one call** —
+  confirmed with two tools offering different argument shapes, asked for
+  both in sequence, got back exactly the right `{name, arguments}` pair for
+  each, correctly ordered. This is the whole mechanism `claude-code.ts`'s
+  `buildToolCallSchema` depends on: the CLI's own `--tools` flag only
+  restricts its built-in tools (Bash, Edit, Read, ...), it doesn't accept
+  arbitrary custom tool schemas the way a function-calling API does, so
+  every turn instead asks for schema-validated JSON matching a
+  `oneOf`-by-tool-name wrapper built from the same `ToolDefinition[]`
+  Groq/Gemini consume, with `--tools ""` disabling every built-in tool so
+  the CLI only ever produces text.
+- **`--resume <sessionId>` carries context across calls** — confirmed live
+  (told it a fact in one call, asked for it back via `--resume` in the
+  next, got the right answer with nothing resent manually). Sidesteps
+  `GroqProvider`'s whole stateless-resend-everything problem structurally.
+
+**A real deployment wrinkle, also confirmed live and worth knowing about
+before touching this code again:** a global `claude` install on Windows is
+a `.cmd` shim, which cannot be launched directly by `CreateProcess` without
+a shell. The first fix tried — `shell: true` with an args array — looked
+reasonable and was wrong: Node deprecated exactly this (`DEP0190`) because
+arguments aren't actually escaped under it, only concatenated, which
+silently corrupted the quote-heavy `--json-schema` value in practice (a
+real run failed with "Unexpected token... is not valid JSON" because of
+it). The actual fix, in `resolveClaudeBin()`: read the `.cmd` shim's own
+contents once to find the real `claude.exe` it wraps, cache that path, and
+spawn it directly with `shell: false` — the same convention as everywhere
+else in this project.
+
+**What this does not do:** write back to anything, use any tool but its
+own text generation, or run in CI — `.github/workflows/orchestrate.yml`
+deliberately only offers `groq`/`gemini` as provider choices, since a
+GitHub Actions runner has no interactive Claude session to shell out to.
+Its own `total_cost_usd` field is a list-price-equivalent figure, not real
+billing under a subscription — `core/run.ts`'s cost estimate deliberately
+reports $0.00 for it instead, the same honest-default reasoning as the free
+tiers.
 
 ### Groq's free tier, confirmed live
 

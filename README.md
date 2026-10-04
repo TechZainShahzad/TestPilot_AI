@@ -126,6 +126,10 @@ npm run orchestrate -- --feature "Product Sorting" --dry-run
 # Or pull the feature straight from a Jira ticket instead of typing it —
 # requires JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN in .env
 npm run orchestrate -- --jira-ticket PROJ-123 --dry-run
+
+# Or run on Claude Code CLI instead of a free-tier API — local only,
+# needs an authenticated `claude` session, not a key
+npm run orchestrate -- --feature "Checkout Flow" --provider claude-code --dry-run
 ```
 
 `--dry-run` plans, generates and runs the tests but never opens a pull
@@ -163,8 +167,12 @@ fix that way is reported as a _suspected application bug_ rather than hidden.
 
 **Why a provider abstraction instead of one SDK.**
 The agents talk through a narrow interface (`chat`, `tools`, token accounting)
-with Gemini and Groq implementations behind it. Both have usable free tiers,
-which matters for a project people are meant to clone and actually run.
+with Gemini, Groq, and Claude Code CLI implementations behind it. The first
+two have usable free tiers, which matters for a project people are meant to
+clone and actually run; the third has no HTTP API at all — it shells out to
+a local CLI — and slotting it in as "just another implementation" rather
+than a special case is the real test of whether the abstraction was honest
+in the first place.
 
 **Why fixed demo accounts instead of generated ones.**
 SauceDemo has no registration flow at all — every identity is one of its
@@ -208,7 +216,7 @@ framework/              Playwright suite — stands alone
 
 orchestrator/           Multi-agent pipeline — a client of the framework
   src/agents/           Explorer, Planner, Generator, Executor, Healer, …
-  src/providers/        Gemini + Groq behind one interface
+  src/providers/        Gemini + Groq + Claude Code CLI behind one interface
   src/core/             State machine, run artifacts, config, guardrails
   src/tools/            Capabilities exposed to the agents
   runs/                 Per-run artifacts (git-ignored)
@@ -229,6 +237,14 @@ Sign in with Google, _Create API key_, paste into `GEMINI_API_KEY`.
 **Groq** (alternate) — [console.groq.com/keys](https://console.groq.com/keys).
 Sign up, _Create API Key_, paste into `GROQ_API_KEY`, and set
 `LLM_PROVIDER=groq`.
+
+**Claude Code CLI** (alternate, **local only** — not usable in CI) — no key
+at all. If you already have [Claude Code](https://claude.com/claude-code)
+installed and authenticated (a Claude subscription), set
+`LLM_PROVIDER=claude-code`. This is the one provider without Groq/Gemini's
+free-tier token ceilings — see "Claude Code CLI, confirmed live" in
+[`docs/agents.md`](docs/agents.md) for what that trades off and what was
+verified live before relying on it.
 
 For pull-request creation, add a fine-grained
 [personal access token](https://github.com/settings/personal-access-tokens)

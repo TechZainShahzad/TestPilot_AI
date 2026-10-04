@@ -9,6 +9,9 @@
  * Generate → Report) runs end to end. This file owns argument parsing, the
  * preflight check, and the stage-by-stage orchestration.
  */
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { runExplorer } from './agents/explorer.js';
 import { runGenerator } from './agents/generator.js';
 import { runHealer } from './agents/healer.js';
@@ -33,10 +36,12 @@ import { runExecutor } from './core/executor.js';
 import { findExistingPullRequest } from './core/github.js';
 import { fetchIssue, type JiraIssue } from './core/jira.js';
 import { RunContext } from './core/run.js';
+import { resolveClaudeBin } from './providers/claude-code.js';
 import { createProvider } from './providers/index.js';
 import { LOG_LEVELS, banner, createLogger, setLogLevel, type LogLevel } from './util/logger.js';
 
 const log = createLogger('cli');
+const execFileAsync = promisify(execFile);
 
 export interface CliOptions {
   /** Target application URL to explore. */
@@ -214,19 +219,56 @@ export function parseArgs(argv: readonly string[]): CliOptions {
   };
 }
 
+/** The configured model string for a provider, for display only — `claude-code`
+ * has no single configured model unless `CLAUDE_CODE_MODEL` is set, in which
+ * case that is what actually gets passed via `--model`. */
+function modelFor(provider: ProviderName): string {
+  switch (provider) {
+    case 'gemini':
+      return config.gemini.model;
+    case 'groq':
+      return config.groq.model;
+    case 'claude-code':
+      return config.claudeCode.model ?? '(subscription default)';
+  }
+}
+
+/** `claude-code` has no key to check — confirm the CLI itself is installed
+ * and authenticated instead, the same "fail fast with a clear message"
+ * spirit as the API-key check for the other providers. Resolves the real
+ * binary the same way `providers/claude-code.ts` does for every actual
+ * call, rather than the `.cmd` shim directly — see `resolveClaudeBin`'s
+ * doc for why. */
+async function assertClaudeCliAvailable(): Promise<void> {
+  try {
+    await execFileAsync(resolveClaudeBin(), ['--version'], { shell: false });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      '`claude` CLI not found or not working. Install Claude Code and run `claude` ' +
+        `interactively once to authenticate before using --provider claude-code. (${detail})`,
+      error instanceof Error ? { cause: error } : undefined
+    );
+  }
+}
+
 /**
  * Check everything the run depends on before any tokens are spent: a provider
  * key, and — unless this is a dry run — a GitHub token to open the PR with.
  * Returns the effective dry-run flag, which is forced on when no token exists.
  */
-export function preflight(options: CliOptions): { dryRun: boolean } {
-  const key = activeApiKey(options.provider);
-  if (key === undefined) {
-    const variable = apiKeyEnvVar(options.provider);
-    throw new Error(
-      `No API key for provider "${options.provider}". Set ${variable} in .env ` +
-        `(see .env.example for where to get a free key).`
-    );
+export async function preflight(options: CliOptions): Promise<{ dryRun: boolean }> {
+  if (options.provider === 'claude-code') {
+    await assertClaudeCliAvailable();
+  } else {
+    const key = activeApiKey(options.provider);
+    if (key === undefined) {
+      const variable = apiKeyEnvVar(options.provider);
+      throw new Error(
+        `No API key for provider "${options.provider}". Set ${variable} in .env ` +
+          `(see .env.example for where to get a free key).`
+      );
+    }
   }
 
   if (options.jiraTicket !== undefined && jiraCredentials() === undefined) {
@@ -263,13 +305,13 @@ async function main(): Promise<void> {
     feature: options.feature,
     jiraTicket: options.jiraTicket,
     provider: options.provider,
-    model: options.provider === 'gemini' ? config.gemini.model : config.groq.model,
+    model: modelFor(options.provider),
     dryRun: options.dryRun,
     headed: options.headed,
     limits: { ...config.limits, maxHealAttempts: options.maxHealAttempts },
   });
 
-  const { dryRun } = preflight(options);
+  const { dryRun } = await preflight(options);
 
   let feature: string;
   let requirements: string | undefined;
@@ -312,9 +354,7 @@ async function main(): Promise<void> {
 
   log.info(`Target:   ${options.url}`);
   log.info(`Feature:  ${feature}`);
-  log.info(
-    `Provider: ${options.provider} (${options.provider === 'gemini' ? config.gemini.model : config.groq.model})`
-  );
+  log.info(`Provider: ${options.provider} (${modelFor(options.provider)})`);
   log.info(`Mode:     ${dryRun ? 'dry run — no pull request' : 'full run — opens a pull request'}`);
 
   const run = new RunContext(feature, options.url, options.provider);

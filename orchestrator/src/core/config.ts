@@ -44,7 +44,7 @@ const optionalString = z
   .optional()
   .transform((raw) => (raw === undefined || raw.trim() === '' ? undefined : raw.trim()));
 
-export const PROVIDERS = ['gemini', 'groq'] as const;
+export const PROVIDERS = ['gemini', 'groq', 'claude-code'] as const;
 export type ProviderName = (typeof PROVIDERS)[number];
 
 const configSchema = z.object({
@@ -54,6 +54,10 @@ const configSchema = z.object({
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   GROQ_API_KEY: optionalString,
   GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
+  // No API key: authenticates via the locally-installed `claude` CLI's own
+  // session (a Claude subscription), not a key stored in .env. Local-only
+  // — see "Claude Code CLI, confirmed live" in docs/agents.md.
+  CLAUDE_CODE_MODEL: optionalString,
 
   MAX_HEAL_ATTEMPTS: integerish(3),
   MAX_REVIEW_ROUNDS: integerish(2),
@@ -96,6 +100,9 @@ export const config = {
     apiKey: raw.GROQ_API_KEY,
     model: raw.GROQ_MODEL,
   },
+  claudeCode: {
+    model: raw.CLAUDE_CODE_MODEL,
+  },
 
   limits: {
     maxHealAttempts: raw.MAX_HEAL_ATTEMPTS,
@@ -128,14 +135,35 @@ export const config = {
 
 export type OrchestratorConfig = typeof config;
 
-/** The API key for whichever provider is selected, or `undefined` if unset. */
+/**
+ * The API key for whichever provider is selected, or `undefined` if unset.
+ * `claude-code` has no key to check here — it authenticates via the local
+ * CLI's own session, verified separately by `cli.ts`'s preflight as a
+ * liveness check (`claude --version`), not a key lookup. It still returns
+ * a non-undefined sentinel so the generic "every provider has a key" gate
+ * in `providers/index.ts`'s `createProvider()` doesn't misfire for it.
+ */
 export function activeApiKey(provider: ProviderName = config.provider): string | undefined {
-  return provider === 'gemini' ? config.gemini.apiKey : config.groq.apiKey;
+  switch (provider) {
+    case 'gemini':
+      return config.gemini.apiKey;
+    case 'groq':
+      return config.groq.apiKey;
+    case 'claude-code':
+      return 'local-cli';
+  }
 }
 
 /** Human-readable name of the env var a missing key should be set in. */
 export function apiKeyEnvVar(provider: ProviderName = config.provider): string {
-  return provider === 'gemini' ? 'GEMINI_API_KEY' : 'GROQ_API_KEY';
+  switch (provider) {
+    case 'gemini':
+      return 'GEMINI_API_KEY';
+    case 'groq':
+      return 'GROQ_API_KEY';
+    case 'claude-code':
+      return '(none — run `claude` interactively once to authenticate)';
+  }
 }
 
 /**

@@ -21,9 +21,15 @@ export interface StepLogEntry {
 /** Rough USD-per-1K-token pricing, for a ballpark cost estimate in the
  * summary only — not billed anywhere, so approximate is fine. Free tiers
  * mean the honest answer is usually "$0.00", which the summary states. */
+// claude-code is the same $0.00 marginal-cost story for a different
+// reason: it runs on a Claude subscription (flat monthly rate), not
+// pay-per-token — the CLI's own total_cost_usd field reports a
+// list-price-equivalent figure, not real incremental billing, so it is
+// deliberately not used here.
 const USD_PER_1K_TOKENS: Record<string, number> = {
   gemini: 0,
   groq: 0,
+  'claude-code': 0,
 };
 
 export class RunContext {
