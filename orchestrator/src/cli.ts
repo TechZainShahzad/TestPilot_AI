@@ -389,6 +389,13 @@ async function main(): Promise<void> {
     ...(requirements !== undefined && { requirements }),
   });
   log.info(`Planner produced ${String(plan.cases.length)} test case(s).`);
+  if (plan.requirementsCoverage.length > 0) {
+    log.info('Requirements understood from the ticket:');
+    for (const entry of plan.requirementsCoverage) {
+      const cases = entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '— no case maps to this (gap)';
+      log.info(`  • ${entry.criterion} → ${cases}`);
+    }
+  }
 
   const generations: GenerationResult[] = [];
   const executions: ExecutionResult[] = [];
@@ -502,10 +509,19 @@ async function main(): Promise<void> {
     log.info('No branch or pull request was created (dry run, or nothing to commit).');
   }
 
+  const resolvedModel = provider.getResolvedModel?.();
+  if (resolvedModel !== undefined && resolvedModel !== modelFor(options.provider)) {
+    log.info(`Model used: ${resolvedModel}`);
+  }
+
   const { usage, estimatedUsd } = run.totals();
+  const listPriceUsd = provider.getListPriceUsd?.();
   log.info(
     `Tokens used: ${String(usage.totalTokens)} (prompt ${String(usage.promptTokens)}, ` +
-      `completion ${String(usage.completionTokens)}) ≈ $${estimatedUsd.toFixed(4)}`
+      `completion ${String(usage.completionTokens)}) ≈ $${estimatedUsd.toFixed(4)}` +
+      (listPriceUsd !== undefined
+        ? ` (Claude API list-price equivalent: $${listPriceUsd.toFixed(4)} — not billed; covered by subscription)`
+        : '')
   );
 }
 

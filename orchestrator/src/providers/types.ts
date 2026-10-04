@@ -64,4 +64,21 @@ export interface LlmProvider {
 
   /** Cumulative usage across every turn this instance has made. */
   getUsage(): TokenUsage;
+
+  /**
+   * The concrete model actually used, only when that isn't already known
+   * from config (e.g. claude-code's own subscription default, resolved
+   * from its response rather than a `--model` flag the caller chose).
+   * Gemini/Groq don't implement this — their configured model string is
+   * already exact.
+   */
+  getResolvedModel?(): string | undefined;
+
+  /**
+   * Cumulative USD a provider's own backend reports directly, when that
+   * figure isn't a static $/1K-token estimate (e.g. claude-code CLI's
+   * `total_cost_usd` — a list-price-equivalent figure for a subscription
+   * call that is not actually billed per token).
+   */
+  getListPriceUsd?(): number;
 }

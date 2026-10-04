@@ -20,7 +20,7 @@ You are given one Explorer agent's findings for a feature — the pages, element
 
 Rules:
 - Cover the feature with a mix of positive (happy path), negative (invalid input, error states), and boundary (edge values, empty/zero/maximum) cases. A plan with only positive cases is incomplete.
-- When explicit acceptance criteria are given in the requirements text, every criterion must map to at least one case — don't substitute a generic mix for what was explicitly asked for.
+- When explicit acceptance criteria are given in the requirements text, every criterion must map to at least one case — don't substitute a generic mix for what was explicitly asked for. Record this mapping in "requirementsCoverage": one entry per criterion, naming the case IDs that verify it. This is how your understanding of the ticket is actually checked, not just asserted — a criterion with no matching case IDs is a gap, not something to paper over by inventing an unrelated case. When no requirements were given, leave "requirementsCoverage" empty.
 - Prioritise: P0 for the primary happy path and any case guarding money/data integrity, P1 for important negative/boundary cases, P2 for edge cases that are good to have but not critical.
 - Every case's "steps" must be executable using only the elements and flows the Explorer actually recorded — reference them by the locator hints and page URLs given, not by guessing new ones.
 - Every case's "expected" must describe one concrete, observable outcome — not "it should work correctly."
@@ -82,6 +82,15 @@ export async function runPlanner(options: PlannerOptions): Promise<TestPlan> {
 
 function renderPlanMarkdown(plan: TestPlan): string {
   const lines: string[] = [`# Test plan: ${plan.feature}`, '', plan.summary, ''];
+
+  if (plan.requirementsCoverage.length > 0) {
+    lines.push('## Requirements traceability', '');
+    for (const entry of plan.requirementsCoverage) {
+      const cases = entry.caseIds.length > 0 ? entry.caseIds.join(', ') : '**no case maps to this**';
+      lines.push(`- ${entry.criterion} → ${cases}`);
+    }
+    lines.push('');
+  }
 
   const byType: Record<string, typeof plan.cases> = { positive: [], negative: [], boundary: [] };
   for (const testCase of plan.cases) {

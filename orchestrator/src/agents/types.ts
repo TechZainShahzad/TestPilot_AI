@@ -66,9 +66,25 @@ export const testCaseSchema = z.object({
 });
 export type TestCase = z.infer<typeof testCaseSchema>;
 
+export const requirementCoverageSchema = z.object({
+  criterion: z
+    .string()
+    .describe('One acceptance criterion from the ticket, verbatim or lightly paraphrased'),
+  caseIds: z
+    .array(z.string())
+    .describe('IDs of every test case in this plan that verifies this criterion'),
+});
+export type RequirementCoverage = z.infer<typeof requirementCoverageSchema>;
+
 export const testPlanSchema = z.object({
   feature: z.string(),
   summary: z.string(),
+  /** One entry per acceptance criterion in the source ticket, mapped to the
+   * case(s) that verify it — a visible traceability record of what the
+   * Planner understood from the requirements, not just the cases it
+   * produced. Empty when no requirements were given (a plain --feature
+   * run has no acceptance criteria to map). */
+  requirementsCoverage: z.array(requirementCoverageSchema).default([]),
   cases: z.array(testCaseSchema),
 });
 export type TestPlan = z.infer<typeof testPlanSchema>;

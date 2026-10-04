@@ -95,6 +95,14 @@ interface ClaudeCliEnvelope {
   result: string;
   is_error: boolean;
   usage?: { input_tokens?: number; output_tokens?: number };
+  /** List-price-equivalent USD for this turn — real for an API key, a
+   * notional "what this would have cost" figure under a subscription.
+   * Never summed into the budget/billing path, only surfaced for display. */
+  total_cost_usd?: number;
+  /** Keyed by the actual model the CLI resolved to run this turn — present
+   * even when no `--model` flag was passed, so this is the only reliable
+   * way to learn what "subscription default" actually resolved to. */
+  modelUsage?: Record<string, unknown>;
 }
 
 interface ToolCallBody {
@@ -179,6 +187,8 @@ export class ClaudeCodeProvider implements LlmProvider {
   private systemPrompt = '';
   private tools: ToolDefinition[] = [];
   private usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  private resolvedModels = new Set<string>();
+  private listPriceUsd = 0;
 
   constructor(
     model: string | undefined,
@@ -192,6 +202,17 @@ export class ClaudeCodeProvider implements LlmProvider {
     userMessage: string,
     tools: ToolDefinition[]
   ): Promise<AssistantTurn> {
+    // Every agent (Explorer, Planner, Generator, Healer, Reviewer) shares
+    // one `ClaudeCodeProvider` instance for the whole run (see cli.ts), but
+    // each must get its OWN fresh conversation with its OWN system prompt —
+    // the shared `LlmProvider` contract's "Starts a fresh conversation"
+    // promise. Without resetting `sessionId` here, every agent after the
+    // first would silently `--resume` the previous agent's session: `invoke`
+    // only sends `--system-prompt` when `sessionId` is undefined, so the
+    // Planner/Generator/Healer/Reviewer would never actually receive their
+    // own role prompt, continuing instead as an unbroken extension of the
+    // Explorer's conversation.
+    this.sessionId = undefined;
     this.systemPrompt = systemPrompt;
     this.tools = tools;
     return this.invoke(userMessage);
@@ -209,6 +230,23 @@ export class ClaudeCodeProvider implements LlmProvider {
 
   getUsage(): TokenUsage {
     return { ...this.usage };
+  }
+
+  /** The model(s) the CLI actually ran, resolved from live responses rather
+   * than asserted — plural because a run that mixed an explicit
+   * `CLAUDE_CODE_MODEL` with a differently-resolved default (or Claude
+   * Code's own internal use of a smaller model for a sub-step) would
+   * otherwise silently collapse to one misleading name. `undefined` before
+   * any call has completed. */
+  getResolvedModel(): string | undefined {
+    return this.resolvedModels.size > 0 ? [...this.resolvedModels].join(', ') : undefined;
+  }
+
+  /** Cumulative `total_cost_usd` across every turn — see the field's own
+   * docstring on {@link ClaudeCliEnvelope} for why this is a display-only,
+   * list-price-equivalent figure, never the run's actual billed cost. */
+  getListPriceUsd(): number {
+    return this.listPriceUsd;
   }
 
   private async invoke(promptText: string): Promise<AssistantTurn> {
@@ -250,6 +288,10 @@ export class ClaudeCodeProvider implements LlmProvider {
     this.usage.completionTokens += envelope.usage?.output_tokens ?? 0;
     this.usage.totalTokens +=
       (envelope.usage?.input_tokens ?? 0) + (envelope.usage?.output_tokens ?? 0);
+    this.listPriceUsd += envelope.total_cost_usd ?? 0;
+    for (const modelName of Object.keys(envelope.modelUsage ?? {})) {
+      this.resolvedModels.add(modelName);
+    }
 
     const body = JSON.parse(envelope.result) as ToolCallBody;
     const toolCalls: ToolCall[] = body.toolCalls.map((call) => ({
