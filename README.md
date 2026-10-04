@@ -122,11 +122,21 @@ cp .env.example .env      # then set GEMINI_API_KEY (free — see below)
 
 npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
 npm run orchestrate -- --feature "Product Sorting" --dry-run
+
+# Or pull the feature straight from a Jira ticket instead of typing it —
+# requires JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN in .env
+npm run orchestrate -- --jira-ticket PROJ-123 --dry-run
 ```
 
 `--dry-run` plans, generates and runs the tests but never opens a pull
 request. It is also forced on automatically when `GITHUB_TOKEN` is absent, so
 there is no way to accidentally push from a fresh clone.
+
+`--feature` and `--jira-ticket` are two input sources for the same
+pipeline, not two different modes — see "Where the feature description
+comes from" in [`docs/agents.md`](docs/agents.md) for how a Jira ticket's
+description flows into the same Explorer/Planner prompts a typed feature
+name would.
 
 Every run writes a fully inspectable folder under
 `orchestrator/runs/<timestamp>/` — one typed JSON artifact per agent, plus the
@@ -205,7 +215,8 @@ orchestrator/           Multi-agent pipeline — a client of the framework
 
 docs/                   Architecture and agent documentation
 examples/               A committed sample run
-.github/workflows/      CI, nightly sharded regression, Pages publishing
+.github/workflows/      CI, nightly sharded regression, Pages publishing,
+                        manually-triggered orchestration from a Jira ticket
 ```
 
 ---

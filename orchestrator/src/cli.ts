@@ -21,8 +21,17 @@ import type {
   HealingResult,
   ReviewResult,
 } from './agents/types.js';
-import { PROVIDERS, apiKeyEnvVar, activeApiKey, config, type ProviderName } from './core/config.js';
+import {
+  PROVIDERS,
+  apiKeyEnvVar,
+  activeApiKey,
+  config,
+  jiraCredentials,
+  type ProviderName,
+} from './core/config.js';
 import { runExecutor } from './core/executor.js';
+import { findExistingPullRequest } from './core/github.js';
+import { fetchIssue, type JiraIssue } from './core/jira.js';
 import { RunContext } from './core/run.js';
 import { createProvider } from './providers/index.js';
 import { LOG_LEVELS, banner, createLogger, setLogLevel, type LogLevel } from './util/logger.js';
@@ -32,8 +41,10 @@ const log = createLogger('cli');
 export interface CliOptions {
   /** Target application URL to explore. */
   url: string;
-  /** Short feature description, e.g. "Bill Pay". */
-  feature: string;
+  /** Short feature description, e.g. "Bill Pay". Mutually exclusive with `jiraTicket`. */
+  feature: string | undefined;
+  /** A Jira issue key, e.g. "PROJ-123", to pull the feature description from. */
+  jiraTicket: string | undefined;
   /** Plan and generate, but never open a pull request. */
   dryRun: boolean;
   /** Which LLM provider the agents should use. */
@@ -51,9 +62,12 @@ TestPilot_AI — AI-orchestrated Playwright test generation
 
 Usage:
   npm run orchestrate -- --feature <name> [options]
+  npm run orchestrate -- --jira-ticket <key> [options]
 
-Required:
+Required (exactly one):
   -f, --feature <name>      Feature to cover, e.g. "Checkout Flow"
+  -j, --jira-ticket <key>   Jira issue key to pull the feature from, e.g. "PROJ-123"
+                            (requires JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN in .env)
 
 Options:
   -u, --url <url>           Target application URL
@@ -71,6 +85,7 @@ Examples:
   npm run orchestrate -- --url https://www.saucedemo.com --feature "Checkout Flow"
   npm run orchestrate -- --feature "Product Sorting" --dry-run --log-level debug
   npm run orchestrate -- --feature "Burger Menu" --dry-run --headed
+  npm run orchestrate -- --jira-ticket PROJ-123 --dry-run
 `;
 
 class UsageError extends Error {}
@@ -79,6 +94,7 @@ class UsageError extends Error {}
 export function parseArgs(argv: readonly string[]): CliOptions {
   let url: string | undefined;
   let feature: string | undefined;
+  let jiraTicket: string | undefined;
   let dryRun = false;
   let provider: ProviderName = config.provider;
   let logLevel: LogLevel = 'info';
@@ -112,6 +128,11 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       case '-f':
       case '--feature':
         feature = valueFor(arg, i);
+        i += 1;
+        break;
+      case '-j':
+      case '--jira-ticket':
+        jiraTicket = valueFor(arg, i);
         i += 1;
         break;
       case '--dry-run':
@@ -160,8 +181,18 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     }
   }
 
-  if (feature === undefined || feature.trim() === '') {
-    throw new UsageError('Missing required option --feature. Run with --help for usage.');
+  const trimmedFeature =
+    feature !== undefined && feature.trim() !== '' ? feature.trim() : undefined;
+  const trimmedJiraTicket =
+    jiraTicket !== undefined && jiraTicket.trim() !== '' ? jiraTicket.trim() : undefined;
+
+  if (trimmedFeature === undefined && trimmedJiraTicket === undefined) {
+    throw new UsageError(
+      'Missing required option: --feature or --jira-ticket. Run with --help for usage.'
+    );
+  }
+  if (trimmedFeature !== undefined && trimmedJiraTicket !== undefined) {
+    throw new UsageError('--feature and --jira-ticket are mutually exclusive — pick one.');
   }
 
   let resolvedUrl = url ?? config.defaultTargetUrl;
@@ -173,7 +204,8 @@ export function parseArgs(argv: readonly string[]): CliOptions {
 
   return {
     url: resolvedUrl,
-    feature: feature.trim(),
+    feature: trimmedFeature,
+    jiraTicket: trimmedJiraTicket,
     dryRun,
     provider,
     logLevel,
@@ -194,6 +226,12 @@ export function preflight(options: CliOptions): { dryRun: boolean } {
     throw new Error(
       `No API key for provider "${options.provider}". Set ${variable} in .env ` +
         `(see .env.example for where to get a free key).`
+    );
+  }
+
+  if (options.jiraTicket !== undefined && jiraCredentials() === undefined) {
+    throw new Error(
+      'JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set in .env to use --jira-ticket.'
     );
   }
 
@@ -223,6 +261,7 @@ async function main(): Promise<void> {
   log.info('Run configuration resolved', {
     url: options.url,
     feature: options.feature,
+    jiraTicket: options.jiraTicket,
     provider: options.provider,
     model: options.provider === 'gemini' ? config.gemini.model : config.groq.model,
     dryRun: options.dryRun,
@@ -232,14 +271,53 @@ async function main(): Promise<void> {
 
   const { dryRun } = preflight(options);
 
+  let feature: string;
+  let requirements: string | undefined;
+  let jiraIssue: JiraIssue | undefined;
+
+  if (options.jiraTicket !== undefined) {
+    banner('Jira');
+    const credentials = jiraCredentials();
+    if (credentials === undefined) {
+      throw new Error('Internal error: preflight should have required Jira credentials.');
+    }
+    jiraIssue = await fetchIssue(options.jiraTicket, credentials);
+    feature = jiraIssue.summary;
+    requirements = jiraIssue.description;
+    log.info(`Ticket:   ${jiraIssue.key} — ${jiraIssue.summary}`);
+    log.info(
+      `Status:   ${jiraIssue.status}` +
+        (jiraIssue.labels.length > 0 ? ` (${jiraIssue.labels.join(', ')})` : '')
+    );
+    log.info(`URL:      ${jiraIssue.url}`);
+
+    const existing = await findExistingPullRequest(
+      config.github.repo,
+      config.github.token,
+      jiraIssue.key
+    );
+    if (existing) {
+      log.warn(
+        `A pull request already references ${jiraIssue.key}: ${existing.url} ` +
+          `(${existing.state}) — continuing anyway, in case this ticket needs more coverage.`
+      );
+    }
+  } else if (options.feature !== undefined) {
+    feature = options.feature;
+  } else {
+    throw new Error(
+      'Internal error: parseArgs should guarantee --feature or --jira-ticket is set.'
+    );
+  }
+
   log.info(`Target:   ${options.url}`);
-  log.info(`Feature:  ${options.feature}`);
+  log.info(`Feature:  ${feature}`);
   log.info(
     `Provider: ${options.provider} (${options.provider === 'gemini' ? config.gemini.model : config.groq.model})`
   );
   log.info(`Mode:     ${dryRun ? 'dry run — no pull request' : 'full run — opens a pull request'}`);
 
-  const run = new RunContext(options.feature, options.url, options.provider);
+  const run = new RunContext(feature, options.url, options.provider);
   log.info(`Run folder: ${run.dir}`);
 
   const provider = createProvider(options.provider);
@@ -249,8 +327,9 @@ async function main(): Promise<void> {
     provider,
     run,
     targetUrl: options.url,
-    feature: options.feature,
+    feature,
     headless: !options.headed,
+    ...(requirements !== undefined && { requirements }),
   });
   log.info(
     `Explorer found ${String(exploration.pages.length)} page(s), ` +
@@ -258,7 +337,13 @@ async function main(): Promise<void> {
   );
 
   banner('Plan');
-  const plan = await runPlanner({ provider, run, feature: options.feature, exploration });
+  const plan = await runPlanner({
+    provider,
+    run,
+    feature,
+    exploration,
+    ...(requirements !== undefined && { requirements }),
+  });
   log.info(`Planner produced ${String(plan.cases.length)} test case(s).`);
 
   const generations: GenerationResult[] = [];
@@ -339,8 +424,9 @@ async function main(): Promise<void> {
   banner('Report');
   const report = await runReporter({
     run,
-    feature: options.feature,
+    feature,
     targetUrl: options.url,
+    ...(jiraIssue !== undefined && { jiraTicket: { key: jiraIssue.key, url: jiraIssue.url } }),
     provider: options.provider,
     exploration,
     plan,

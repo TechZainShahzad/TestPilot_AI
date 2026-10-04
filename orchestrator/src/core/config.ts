@@ -65,6 +65,10 @@ const configSchema = z.object({
   GITHUB_REPO: z.string().default('TechZainShahzad/TestPilot_AI'),
   GITHUB_BASE_BRANCH: z.string().default('main'),
 
+  JIRA_BASE_URL: optionalString,
+  JIRA_EMAIL: optionalString,
+  JIRA_API_TOKEN: optionalString,
+
   BASE_URL: z.url().default('https://www.saucedemo.com'),
 });
 
@@ -107,6 +111,12 @@ export const config = {
     baseBranch: raw.GITHUB_BASE_BRANCH,
   },
 
+  jira: {
+    baseUrl: raw.JIRA_BASE_URL,
+    email: raw.JIRA_EMAIL,
+    apiToken: raw.JIRA_API_TOKEN,
+  },
+
   defaultTargetUrl: raw.BASE_URL,
 
   paths: {
@@ -126,4 +136,19 @@ export function activeApiKey(provider: ProviderName = config.provider): string |
 /** Human-readable name of the env var a missing key should be set in. */
 export function apiKeyEnvVar(provider: ProviderName = config.provider): string {
   return provider === 'gemini' ? 'GEMINI_API_KEY' : 'GROQ_API_KEY';
+}
+
+/**
+ * Jira credentials, only when all three are present. A fixed-user-style
+ * half-filled config (e.g. a base URL with no token) would otherwise
+ * produce a confusing fetch failure rather than a clear "you haven't set
+ * this up" message at startup.
+ */
+export function jiraCredentials():
+  { baseUrl: string; email: string; apiToken: string } | undefined {
+  const { baseUrl, email, apiToken } = config.jira;
+  if (baseUrl === undefined || email === undefined || apiToken === undefined) {
+    return undefined;
+  }
+  return { baseUrl, email, apiToken };
 }

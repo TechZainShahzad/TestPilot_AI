@@ -147,14 +147,37 @@ into one HTML report; Allure results merge by concatenation. See
 
 ## CI/CD
 
-| Workflow      | Trigger              | Does                                                                                                                                      |
-| ------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`      | push/PR to `main`    | Prettier → ESLint → `tsc` → `@smoke`. The browser job runs only after static checks pass, so a lint error never costs a browser download. |
-| `nightly.yml` | 02:30 UTC, or manual | Full suite across 4 shards (`fail-fast: false`), merges reports, calls `pages.yml`.                                                       |
-| `pages.yml`   | reusable / manual    | Generates the Allure report with restored history and deploys to GitHub Pages.                                                            |
+| Workflow          | Trigger              | Does                                                                                                                                        |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`          | push/PR to `main`    | Prettier → ESLint → `tsc` → `@smoke`. The browser job runs only after static checks pass, so a lint error never costs a browser download.   |
+| `nightly.yml`     | 02:30 UTC, or manual | Full suite across 4 shards (`fail-fast: false`), merges reports, calls `pages.yml`.                                                         |
+| `pages.yml`       | reusable / manual    | Generates the Allure report with restored history and deploys to GitHub Pages.                                                              |
+| `orchestrate.yml` | manual, with inputs  | Runs the orchestrator against a Jira ticket typed into the "Run workflow" form. Defaults to `--dry-run`; requires repo secrets — see below. |
 
 Traces upload on failure; the HTML report uploads always, because a red report
 is the most useful artifact a failed run can produce.
+
+### Setting up `orchestrate.yml`
+
+This workflow needs credentials `ci.yml`/`nightly.yml` never touch, since it
+calls Groq/Gemini and Jira, not just the app under test. Add these under
+**Settings → Secrets and variables → Actions** on the repository:
+
+| Secret                             | Same value as                   |
+| ---------------------------------- | ------------------------------- |
+| `GROQ_API_KEY` or `GEMINI_API_KEY` | the matching key in your `.env` |
+| `JIRA_BASE_URL`                    | your `.env`'s `JIRA_BASE_URL`   |
+| `JIRA_EMAIL`                       | your `.env`'s `JIRA_EMAIL`      |
+| `JIRA_API_TOKEN`                   | your `.env`'s `JIRA_API_TOKEN`  |
+
+`GITHUB_TOKEN` is **not** a secret to add — the workflow uses the token
+GitHub Actions already injects automatically into every run
+(`secrets.GITHUB_TOKEN`), scoped to this repo via the `permissions:
+contents: write, pull-requests: write` block in the workflow file. If the
+repository's own Settings → Actions → General → "Workflow permissions" is
+set to read-only, that overrides the workflow's own request and PR
+creation will fail with a permissions error — check that setting first if
+a non-dry-run run can't open its PR.
 
 **A note on load.** SauceDemo is a small, shared public demo, not a
 load-tested target, and it fronts with Cloudflare — the same class of

@@ -38,12 +38,22 @@ export interface ExplorerOptions {
   run: RunContext;
   targetUrl: string;
   feature: string;
+  /** Free-text requirements (e.g. a Jira ticket's description) to ground exploration in. */
+  requirements?: string;
   headless?: boolean;
   maxSteps?: number;
 }
 
 export async function runExplorer(options: ExplorerOptions): Promise<ExplorationResult> {
-  const { provider, run, targetUrl, feature, headless = true, maxSteps = 25 } = options;
+  const {
+    provider,
+    run,
+    targetUrl,
+    feature,
+    requirements,
+    headless = true,
+    maxSteps = 25,
+  } = options;
 
   const browser = await chromium.launch({ headless });
   try {
@@ -65,6 +75,9 @@ export async function runExplorer(options: ExplorerOptions): Promise<Exploration
     const userMessage = [
       `Target application: ${targetUrl}`,
       `Feature to explore: ${feature}`,
+      ...(requirements !== undefined
+        ? ['', 'Requirements (from the source ticket):', requirements]
+        : []),
       '',
       'Explore this feature now, then call the submit tool with your findings.',
     ].join('\n');

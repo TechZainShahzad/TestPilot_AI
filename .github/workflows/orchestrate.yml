@@ -1,0 +1,95 @@
+name: Orchestrate from Jira
+
+# Manually triggered: type a Jira issue key into the "Run workflow" form and
+# this runs the full Explore -> Plan -> Generate -> Execute -> Heal ->
+# Review -> Report pipeline against it. Defaults to --dry-run so a first
+# run never opens a PR by accident; set dry_run to false once you trust it.
+on:
+  workflow_dispatch:
+    inputs:
+      jira_ticket:
+        description: 'Jira issue key, e.g. PROJ-123'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (plan + generate + test, no PR)'
+        required: true
+        type: boolean
+        default: true
+      provider:
+        description: 'LLM provider'
+        required: false
+        type: choice
+        options:
+          - groq
+          - gemini
+        default: groq
+
+concurrency:
+  group: orchestrate-${{ inputs.jira_ticket }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CI: 'true'
+  FORCE_COLOR: '1'
+
+jobs:
+  orchestrate:
+    name: Orchestrate ${{ inputs.jira_ticket }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: framework
+
+      # The Reporter commits on the orchestrator's behalf when dry_run is
+      # false; a bare runner has no git identity configured by default.
+      - name: Configure git identity
+        run: |
+          git config --global user.name "TestPilot_AI"
+          git config --global user.email "actions@users.noreply.github.com"
+
+      - name: Run orchestrator
+        run: |
+          npm run orchestrate -- \
+            --jira-ticket "${{ inputs.jira_ticket }}" \
+            --provider "${{ inputs.provider }}" \
+            --log-level debug \
+            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Upload run artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestrator-run-${{ inputs.jira_ticket }}
+          path: orchestrator/runs/
+          retention-days: 30

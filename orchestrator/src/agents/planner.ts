@@ -20,6 +20,7 @@ You are given one Explorer agent's findings for a feature — the pages, element
 
 Rules:
 - Cover the feature with a mix of positive (happy path), negative (invalid input, error states), and boundary (edge values, empty/zero/maximum) cases. A plan with only positive cases is incomplete.
+- When explicit acceptance criteria are given in the requirements text, every criterion must map to at least one case — don't substitute a generic mix for what was explicitly asked for.
 - Prioritise: P0 for the primary happy path and any case guarding money/data integrity, P1 for important negative/boundary cases, P2 for edge cases that are good to have but not critical.
 - Every case's "steps" must be executable using only the elements and flows the Explorer actually recorded — reference them by the locator hints and page URLs given, not by guessing new ones.
 - Every case's "expected" must describe one concrete, observable outcome — not "it should work correctly."
@@ -32,11 +33,13 @@ export interface PlannerOptions {
   run: RunContext;
   feature: string;
   exploration: ExplorationResult;
+  /** Free-text requirements (e.g. a Jira ticket's description) to plan against. */
+  requirements?: string;
   maxSteps?: number;
 }
 
 export async function runPlanner(options: PlannerOptions): Promise<TestPlan> {
-  const { provider, run, feature, exploration, maxSteps = 8 } = options;
+  const { provider, run, feature, exploration, requirements, maxSteps = 8 } = options;
 
   const submitTool: ToolImplementation = {
     definition: {
@@ -49,6 +52,9 @@ export async function runPlanner(options: PlannerOptions): Promise<TestPlan> {
 
   const userMessage = [
     `Feature: ${feature}`,
+    ...(requirements !== undefined
+      ? ['', 'Requirements (from the source ticket):', requirements]
+      : []),
     '',
     'Explorer findings (JSON):',
     JSON.stringify(exploration, null, 2),

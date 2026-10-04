@@ -16,7 +16,7 @@
  * most recent turn's tool results at full size and replaces everything
  * earlier with a short placeholder before every send.
  */
-import Groq, { RateLimitError } from 'groq-sdk';
+import Groq, { APIError, RateLimitError } from 'groq-sdk';
 import type {
   ChatCompletion,
   ChatCompletionMessageParam,
@@ -141,13 +141,40 @@ export class GroqProvider implements LlmProvider {
   }
 
   /**
-   * Retries on `RateLimitError` using the exact wait time Groq's own error
-   * message reports (`"Please try again in 1.7025s."`) — confirmed live:
-   * the free tier's 8,000-token/minute budget is tight enough that a single
-   * agent occasionally gets throttled by normal, correctly-sized requests,
-   * not runaway ones (see the class-level note on `collapseOlderToolResults`
-   * for the difference). Falls back to linear backoff if the message format
-   * ever changes. Gives up after `maxAttempts`, surfacing the real error.
+   * Retries on a token-budget error using the exact wait time Groq's own
+   * error message reports (`"Please try again in 1.7025s."`) — confirmed
+   * live: the free tier's 8,000-token/minute budget is tight enough that a
+   * single agent occasionally gets throttled by normal, correctly-sized
+   * requests, not runaway ones (see the class-level note on
+   * `collapseOlderToolResults` for the difference).
+   *
+   * Groq signals this two different ways for the same underlying budget,
+   * confirmed live from two separate failures: `429` ("you've used your
+   * budget, wait") comes back as the SDK's own `RateLimitError`, but `413`
+   * ("this one request alone is too big") comes back as a plain `APIError`
+   * — the SDK only special-cases 429. Checking `RateLimitError` alone
+   * silently skipped retrying on the 413 case and crashed the whole run
+   * instead of surfacing it after a bounded, backed-off retry like every
+   * other token-budget error. Note what retrying does *not* fix: nothing
+   * re-shrinks `this.messages` between attempts here, so if a 413 is
+   * caused by this one request's own size (no trailing `"Used: ..."` in
+   * Groq's message, confirmed live) rather than exhausted budget, retrying
+   * reproduces the identical oversized payload and fails again the same
+   * way — a real example hit `maxAttempts` doing exactly that, caused by
+   * the model re-reading the same two files three times each rather than
+   * converging, which `collapseOlderToolResults` cannot help with since it
+   * only collapses past rounds' `tool` messages, not the fixed `user`
+   * message (which embeds the full plan/exploration JSON on every single
+   * turn, never shrinking) or accumulating `assistant` messages. That is a
+   * separate, real gap this fix does not close. Both 413 and 429 still
+   * carry the same `"rate_limit_exceeded"` code in the response body, so
+   * both are retried the same way here, distinguished from every other
+   * `APIError` (bad request, auth failure, etc.) by status code, which
+   * never retrying on would just waste `maxAttempts` on an error no wait
+   * fixes.
+   *
+   * Falls back to linear backoff if the message format ever changes. Gives
+   * up after `maxAttempts`, surfacing the real error.
    */
   private async createWithRetry(maxAttempts = 4): Promise<ChatCompletion> {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -166,7 +193,9 @@ export class GroqProvider implements LlmProvider {
           max_completion_tokens: 4096,
         });
       } catch (error) {
-        if (!(error instanceof RateLimitError) || attempt === maxAttempts) {
+        const isTokenBudgetError =
+          error instanceof RateLimitError || (error instanceof APIError && error.status === 413);
+        if (!isTokenBudgetError || attempt === maxAttempts) {
           throw error;
         }
         const waitMs = parseRetryAfterMs(error.message) ?? attempt * 2000;

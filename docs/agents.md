@@ -12,11 +12,19 @@
 > `TestPilot_AI` repo. **Explore and Plan have additionally been run live
 > against Groq** (`openai/gpt-oss-120b`, free tier) — real tool-calling turns,
 > real page data, a genuinely well-formed plan — see "Groq's free tier,
-> confirmed live" below for what that run found and fixed. Generate onward
-> is implemented and unit-verified the same way as the rest of the pipeline,
-> but not yet exercised end-to-end live: the free tier's 200,000-token daily
-> cap was exhausted by the Explore/Plan debugging session before Generate
-> could complete a full live pass.
+> confirmed live" below for what that run found and fixed.
+>
+> **The full pipeline, Explore through Report, has been run to completion
+> once** (the committed [`examples/`](../examples/) run) with every
+> mechanical action genuinely real — live browser, live `write_file` calls,
+> live Playwright execution, live ESLint/`tsc`. The one thing not live in
+> that run was the model's reasoning itself: Groq's 200,000-token daily cap
+> was exhausted by the Explore/Plan debugging session before a full live
+> pass could complete, and no Gemini key was configured as a fallback, so a
+> disclosed deterministic script stood in for the LLM call — see
+> [`examples/README.md`](../examples/README.md) for exactly what that means
+> and does not mean. A fully live run, start to finish, is still the one
+> thing left to verify once quota allows.
 
 ## Pipeline
 
@@ -36,17 +44,49 @@ Each stage reads and writes typed JSON artifacts in
 transition, which is what makes a run inspectable after the fact and
 resumable from any step.
 
+## Where the feature description comes from
+
+A run starts from either `--feature "name"` (a human-typed short
+description) or `--jira-ticket KEY` — not both; `parseArgs` in
+[`cli.ts`](../orchestrator/src/cli.ts) rejects either zero or both being
+given. `--jira-ticket` does not add a new pipeline stage or a new agent:
+[`core/jira.ts`](../orchestrator/src/core/jira.ts) fetches the issue (Jira
+Cloud's REST API v3, HTTP Basic auth — not a bearer token, a real and easy
+mistake), converts its description out of Atlassian Document Format into
+plain text with a small recursive walker, and the result becomes the same
+`feature`/`requirements` strings the Explorer and Planner already accept —
+the ticket's summary becomes `feature`, its converted description becomes
+an optional `requirements` string appended to both agents' prompts. The
+Planner's system prompt has one added rule for this case: when the
+requirements text states explicit acceptance criteria, every criterion
+must map to at least one case, not just "a reasonable mix."
+
+Before spending any tokens, `main()` also checks GitHub's search API
+(`findExistingPullRequest` in [`core/github.ts`](../orchestrator/src/core/github.ts))
+for a PR already referencing the ticket key, and **warns** (does not
+block) if one exists — the ticket may legitimately need more coverage
+added later. This is deliberately not a separate local "registry" file:
+GitHub is already the source of truth for whether a PR exists, and a local
+record of past runs could drift out of sync with it (a PR closed or merged
+outside this tool would leave a local record lying). When a Jira ticket
+drove the run, the Reporter also embeds its key in the branch name and
+adds a line linking back to it in the PR body/`summary.md`.
+
+Writing back to Jira (comments, status transitions) is explicitly out of
+scope for this — it changes a system of record other teams depend on, and
+deserves its own pass with its own review, not a side effect of this one.
+
 ## Agent contracts
 
-| Agent         | Reads                                                      | Writes                                                                           | Hard guardrail                                                                                                                |
-| ------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Explorer**  | target URL, feature description                            | `exploration.json` — pages, elements, flows, locator candidates                  | Never guesses: every locator candidate is read from a live DOM / accessibility snapshot                                       |
-| **Planner**   | `exploration.json`, feature description                    | `plan.md` + `plan.json` — cases with priority, type (positive/negative/boundary) | Must produce negative _and_ boundary cases, not just happy paths                                                              |
-| **Generator** | `plan.json`, `exploration.json`, existing framework source | file writes under `framework/`                                                   | Must reuse existing page objects; creating a near-duplicate is a review failure                                               |
-| **Executor**  | generated spec paths                                       | `execution-<n>.json` — results, traces, stderr                                   | Read-only with respect to source; it runs tests, it does not edit them                                                        |
-| **Healer**    | `execution-<n>.json`, source under test                    | patches + `healing-<n>.json` with a verdict per failure                          | **May not weaken an assertion.** Fixes locators, waits, setup. Classifies anything else as a suspected app bug and reports it |
-| **Reviewer**  | `generation.json`, real ESLint/`tsc` output                | `review-<n>.json` — verdict + findings                                           | Lint and type-check must pass first, checked outside the model; has no `write_file` tool, so it cannot alter what it reviews  |
-| **Reporter**  | every prior artifact                                       | `summary.md`, pull request                                                       | Opens a PR on a new branch, staging only the exact files generated. Never pushes to `main`. Not an LLM agent — deterministic  |
+| Agent         | Reads                                                                        | Writes                                                                           | Hard guardrail                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Explorer**  | target URL, feature description, optional requirements text (e.g. from Jira) | `exploration.json` — pages, elements, flows, locator candidates                  | Never guesses: every locator candidate is read from a live DOM / accessibility snapshot                                       |
+| **Planner**   | `exploration.json`, feature description, optional requirements text          | `plan.md` + `plan.json` — cases with priority, type (positive/negative/boundary) | Must produce negative _and_ boundary cases, not just happy paths; every explicit acceptance criterion must map to a case      |
+| **Generator** | `plan.json`, `exploration.json`, existing framework source                   | file writes under `framework/`                                                   | Must reuse existing page objects; creating a near-duplicate is a review failure                                               |
+| **Executor**  | generated spec paths                                                         | `execution-<n>.json` — results, traces, stderr                                   | Read-only with respect to source; it runs tests, it does not edit them                                                        |
+| **Healer**    | `execution-<n>.json`, source under test                                      | patches + `healing-<n>.json` with a verdict per failure                          | **May not weaken an assertion.** Fixes locators, waits, setup. Classifies anything else as a suspected app bug and reports it |
+| **Reviewer**  | `generation.json`, real ESLint/`tsc` output                                  | `review-<n>.json` — verdict + findings                                           | Lint and type-check must pass first, checked outside the model; has no `write_file` tool, so it cannot alter what it reviews  |
+| **Reporter**  | every prior artifact, optional Jira ticket key/URL                           | `summary.md`, pull request                                                       | Opens a PR on a new branch, staging only the exact files generated. Never pushes to `main`. Not an LLM agent — deterministic  |
 
 ## Guardrails, and why each one exists
 

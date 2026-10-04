@@ -27,6 +27,52 @@ export class GitHubApiError extends Error {
   }
 }
 
+export interface ExistingPullRequest {
+  url: string;
+  number: number;
+  state: string;
+}
+
+/**
+ * Checks whether a PR already referencing `ticketKey` exists, so a
+ * `--jira-ticket` run can warn instead of silently duplicating work. Uses
+ * GitHub's search API rather than a separate local record of past runs —
+ * GitHub itself is the source of truth for "has a PR been raised," and a
+ * local record could drift out of sync with reality (a PR closed or
+ * merged outside this tool would leave a local record lying).
+ */
+export async function findExistingPullRequest(
+  repo: string,
+  token: string | undefined,
+  ticketKey: string
+): Promise<ExistingPullRequest | undefined> {
+  const query = `repo:${repo} type:pr in:title ${ticketKey}`;
+  const response = await fetch(
+    `https://api.github.com/search/issues?q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(token !== undefined && { Authorization: `Bearer ${token}` }),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new GitHubApiError(
+      `GitHub search API failed (${String(response.status)}): ${detail}`,
+      response.status
+    );
+  }
+
+  const data = (await response.json()) as {
+    items: { html_url: string; number: number; state: string }[];
+  };
+  const first = data.items[0];
+  return first && { url: first.html_url, number: first.number, state: first.state };
+}
+
 export async function createPullRequest(
   options: CreatePullRequestOptions
 ): Promise<CreatePullRequestResult> {
