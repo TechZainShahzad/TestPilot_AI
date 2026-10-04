@@ -96,9 +96,19 @@ export default tseslint.config(
 
   {
     // The orchestrator is a CLI. Its whole job is to talk to the operator, so
-    // it owns a logger that writes to stdout.
+    // it owns a logger that writes to stdout — and, in agent-loop.ts and the
+    // util/ pair below, the live spinner/status lines that sit alongside it.
+    // Those are deliberately NOT routed through createLogger(): they're
+    // transient terminal presentation (a spinner animates via \r, a result
+    // line is unconditional regardless of LOG_LEVEL), not a structured record
+    // — run.appendStep already owns that separately, in run.log.
     name: 'testpilot/orchestrator-cli',
-    files: ['orchestrator/src/util/logger.ts', 'orchestrator/src/cli.ts'],
+    files: [
+      'orchestrator/src/util/logger.ts',
+      'orchestrator/src/util/spinner.ts',
+      'orchestrator/src/cli.ts',
+      'orchestrator/src/core/agent-loop.ts',
+    ],
     rules: { 'no-console': 'off' },
   },
 

@@ -13,13 +13,24 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 const LEVEL_RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
-/** ANSI colours, suppressed when stdout is not a TTY or NO_COLOR is set. */
-const useColour = process.stdout.isTTY && !process.env.NO_COLOR;
+/**
+ * ANSI colours, suppressed when stdout is not a TTY or NO_COLOR is set.
+ * Exported as `colour` so other modules that write directly to the
+ * terminal (`util/spinner.ts`, `util/agents-meta.ts`) share this exact
+ * TTY/NO_COLOR check rather than each re-deriving their own.
+ */
+export const isInteractiveTerminal = process.stdout.isTTY && !process.env.NO_COLOR;
+const useColour = isInteractiveTerminal;
 const ESC = '\u001b';
 const paint = (code: number, text: string): string =>
   useColour ? `${ESC}[${String(code)}m${text}${ESC}[0m` : text;
 
 const dim = (text: string): string => paint(2, text);
+export const colour = {
+  dim,
+  bold: (text: string): string => paint(1, text),
+};
+
 const LEVEL_STYLE: Record<LogLevel, (text: string) => string> = {
   debug: (t) => paint(90, t),
   info: (t) => paint(36, t),

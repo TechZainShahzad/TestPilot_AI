@@ -38,7 +38,9 @@ import { fetchIssue, type JiraIssue } from './core/jira.js';
 import { RunContext } from './core/run.js';
 import { resolveClaudeBin } from './providers/claude-code.js';
 import { createProvider } from './providers/index.js';
+import { agentPrefix, stageLine } from './util/agents-meta.js';
 import { LOG_LEVELS, banner, createLogger, setLogLevel, type LogLevel } from './util/logger.js';
+import { withSpinner } from './util/spinner.js';
 
 const log = createLogger('cli');
 const execFileAsync = promisify(execFile);
@@ -318,7 +320,7 @@ async function main(): Promise<void> {
   let jiraIssue: JiraIssue | undefined;
 
   if (options.jiraTicket !== undefined) {
-    banner('Jira');
+    banner(stageLine('jira'));
     const credentials = jiraCredentials();
     if (credentials === undefined) {
       throw new Error('Internal error: preflight should have required Jira credentials.');
@@ -362,7 +364,7 @@ async function main(): Promise<void> {
 
   const provider = createProvider(options.provider);
 
-  banner('Explore');
+  banner(stageLine('explorer'));
   const exploration = await runExplorer({
     provider,
     run,
@@ -376,7 +378,7 @@ async function main(): Promise<void> {
       `${String(exploration.elements.length)} element(s), ${String(exploration.flows.length)} flow(s).`
   );
 
-  banner('Plan');
+  banner(stageLine('planner'));
   const plan = await runPlanner({
     provider,
     run,
@@ -394,7 +396,7 @@ async function main(): Promise<void> {
 
   let round = 1;
   for (;;) {
-    banner(`Generate (round ${String(round)})`);
+    banner(stageLine('generator', `round ${String(round)}`));
     const lastReview = reviews.at(-1);
     const generation = await runGenerator({
       provider,
@@ -414,16 +416,18 @@ async function main(): Promise<void> {
       throw new Error('Generator produced no spec files — nothing to execute.');
     }
 
-    banner('Execute');
+    banner(stageLine('executor'));
     healAttempt += 1;
-    let execution = await runExecutor({ run, specFiles, attempt: healAttempt });
+    let execution = await withSpinner(`${agentPrefix('executor')} is running the suite…`, () =>
+      runExecutor({ run, specFiles, attempt: healAttempt })
+    );
     executions.push(execution);
     log.info(
       `Attempt ${String(healAttempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
     );
 
     while (execution.failed > 0 && healAttempt <= options.maxHealAttempts) {
-      banner(`Heal (attempt ${String(healAttempt)})`);
+      banner(stageLine('healer', `attempt ${String(healAttempt)}`));
       const healing = await runHealer({ provider, run, execution, attempt: healAttempt });
       healings.push(healing);
       for (const verdict of healing.verdicts) {
@@ -431,8 +435,10 @@ async function main(): Promise<void> {
       }
 
       healAttempt += 1;
-      banner(`Execute (attempt ${String(healAttempt)})`);
-      execution = await runExecutor({ run, specFiles, attempt: healAttempt });
+      banner(stageLine('executor', `attempt ${String(healAttempt)}`));
+      execution = await withSpinner(`${agentPrefix('executor')} is running the suite…`, () =>
+        runExecutor({ run, specFiles, attempt: healAttempt })
+      );
       executions.push(execution);
       log.info(
         `Attempt ${String(healAttempt)}: ${String(execution.passed)} passed, ${String(execution.failed)} failed, ${String(execution.skipped)} skipped.`
@@ -446,7 +452,7 @@ async function main(): Promise<void> {
       );
     }
 
-    banner(`Review (round ${String(round)})`);
+    banner(stageLine('reviewer', `round ${String(round)}`));
     const review = await runReviewer({ provider, run, generation, round });
     reviews.push(review);
     log.info(
@@ -461,21 +467,23 @@ async function main(): Promise<void> {
     round += 1;
   }
 
-  banner('Report');
-  const report = await runReporter({
-    run,
-    feature,
-    targetUrl: options.url,
-    ...(jiraIssue !== undefined && { jiraTicket: { key: jiraIssue.key, url: jiraIssue.url } }),
-    provider: options.provider,
-    exploration,
-    plan,
-    generations,
-    executions,
-    healings,
-    reviews,
-    dryRun,
-  });
+  banner(stageLine('reporter'));
+  const report = await withSpinner(`${agentPrefix('reporter')} is writing the summary…`, () =>
+    runReporter({
+      run,
+      feature,
+      targetUrl: options.url,
+      ...(jiraIssue !== undefined && { jiraTicket: { key: jiraIssue.key, url: jiraIssue.url } }),
+      provider: options.provider,
+      exploration,
+      plan,
+      generations,
+      executions,
+      healings,
+      reviews,
+      dryRun,
+    })
+  );
   log.info(`Summary written to ${report.summaryPath}`);
   if (report.pullRequestUrl) {
     log.info(`Pull request opened: ${report.pullRequestUrl}`);
